@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
@@ -5,7 +6,7 @@ import streamlit as st
 G = 9.81
 
 st.set_page_config(page_title="Open Channel Flow Lab", page_icon="🌊", layout="wide")
-st.title("🌊 Open Channel Flow Lab · v9")
+st.title("🌊 Open Channel Flow Lab · v10")
 st.caption("Module 01 · Prismatic rectangular channel · Steady gradually varied flow")
 
 
