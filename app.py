@@ -5,7 +5,7 @@ import streamlit as st
 G = 9.81
 
 st.set_page_config(page_title="Open Channel Flow Lab", page_icon="🌊", layout="wide")
-st.title("🌊 Open Channel Flow Lab · v5")
+st.title("🌊 Open Channel Flow Lab · v6")
 st.caption("Module 01 · Prismatic rectangular channel · Steady gradually varied flow")
 
 with st.sidebar:
@@ -101,39 +101,65 @@ normal_tolerance = max(0.005, 0.02 * initial_departure)
 critical_tolerance = max(0.003, 0.005 * yc)
 min_display_length = 20.0
 
-for _ in range(12000):
+# Defina (2010), Section 8.2.1, equations (99)-(101): explicit Euler.
+# Subcritical: y_(i+1) = y_i - f_i * Δx (integrate upstream).
+# Supercritical: y_(i+1) = y_i + f_i * Δx (integrate downstream).
+# f_i = (S0 - Sf_i)/(1 - Fr_i²). All quantities evaluated at i.
+# Recommended step limits: 1-10*y (subcritical), <= 0.5-2*y
+# (supercritical); shorten further close to critical flow.
+MAX_STEPS = 30000
+for _ in range(MAX_STEPS):
     t, y = t_values[-1], depth_values[-1]
     if t >= limit - 1e-9:
         stop_reason = "Maximum channel length reached"
         break
     if auto_length and t >= min_display_length:
-        if initial_departure > normal_tolerance and abs(y - yn) <= normal_tolerance:
+        if initial_departure <= normal_tolerance:
+            stop_reason = "Uniform-flow condition"
+            break
+        if abs(y - yn) <= normal_tolerance:
             stop_reason = "Profile approached normal depth"
             break
         if abs(y - yc) <= critical_tolerance:
             stop_reason = "Profile approached critical depth"
             break
+
     try:
-        gradient = rhs(y)
-        # Adaptive spatial step: limit depth variation to ~2% per step,
-        # while avoiding unnecessarily dense output in near-uniform reaches.
-        h = min(5.0, max(0.02, 0.02 * max(y, 0.1) / max(abs(gradient), 1e-10)))
-        h = min(h, limit - t)
-        signed_h = sign * h
-        k1 = rhs(y)
-        k2 = rhs(y + signed_h * k1 / 2)
-        k3 = rhs(y + signed_h * k2 / 2)
-        k4 = rhs(y + signed_h * k3)
-        next_y = y + signed_h * (k1 + 2*k2 + 2*k3 + k4) / 6
-        if (not np.isfinite(next_y) or next_y <= 0
-                or (y - yc) * (next_y - yc) <= 0):
-            raise ValueError("Profile reached critical depth")
+        f = rhs(y)
+        # A conservative step inside the source's recommended ranges.
+        # Near critical depth use smaller steps to avoid crossing Fr=1.
+        base_step = (1.0 if subcritical else 0.5) * y
+        if abs(f) > 1e-12:
+            base_step = min(base_step, 0.025 * max(y, 0.05) / abs(f))
+        # Limit relative proximity to critical depth and the normal-depth
+        # asymptote without forcing the profile onto either reference line.
+        if abs(f) > 1e-12 and abs(y - yc) > critical_tolerance:
+            base_step = min(base_step, 0.25 * abs(y - yc) / abs(f))
+        dx = min(base_step, limit - t)
+        if dx < 1e-8:
+            stop_reason = "Step became too small near critical depth"
+            break
+        # First-order explicit step, with local step-halving to keep the
+        # same flow regime and ensure a positive physical depth.
+        for attempt in range(35):
+            next_y = y + sign * f * dx
+            if (np.isfinite(next_y) and next_y > 0
+                    and (next_y - yc) * (y - yc) > 0
+                    and abs(next_y - y) <= 0.05 * max(y, 0.05)):
+                break
+            dx *= 0.5
+        else:
+            stop_reason = "Unable to advance without crossing critical depth"
+            break
     except (ValueError, ZeroDivisionError, OverflowError) as exc:
         warning = str(exc)
         stop_reason = "Integration stopped near a singularity"
         break
-    t_values.append(t + h)
+    t_values.append(t + dx)
     depth_values.append(next_y)
+else:
+    stop_reason = "Numerical step limit reached"
+    warning = "Maximum number of explicit integration steps reached"
 
 extent = max(t_values[-1], 0.01)
 # Add a small amount of horizontal breathing room, but do not distort
@@ -230,4 +256,8 @@ with st.expander("Equations and model assumptions"):
     st.latex(r"S_f=\left(\frac{nQ}{AR^{2/3}}\right)^2")
     st.latex(r"Fr^2=\frac{Q^2}{gb^2y^3}")
     st.latex(r"y_c=\left(\frac{Q^2}{gb^2}\right)^{1/3}")
-    st.write("Assumptions: prismatic rectangular channel, steady flow, hydrostatic pressure, unit energy coefficient, and constant roughness. Adaptive-step RK4 integration; automatic length stops near normal or critical depth or at the maximum permitted length.")
+    st.markdown("**Numerical scheme — Defina, Section 8.2.1**")
+    st.latex(r"y_{i+1}=y_i-\left(\frac{S_0-S_f}{1-Fr^2}\right)_i\Delta x\qquad(Fr<1,\ \mathrm{downstream\ to\ upstream})")
+    st.latex(r"y_{i+1}=y_i+\left(\frac{S_0-S_f}{1-Fr^2}\right)_i\Delta x\qquad(Fr>1,\ \mathrm{upstream\ to\ downstream})")
+    st.caption("Reference: Andrea Defina, Profili di moto permanente (2010), §8.2.1, equations (99)–(101), printed pages 129–130.")
+    st.write("Assumptions: prismatic rectangular channel, steady flow, hydrostatic pressure, unit energy coefficient, and constant roughness. First-order explicit spatial integration following Defina (2010), Section 8.2.1, equations (99)–(101); adaptive step sizes within the stated hydraulic limits. Automatic length stops near normal or critical depth or at the maximum permitted length.")
