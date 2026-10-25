@@ -5,7 +5,7 @@ import streamlit as st
 G = 9.81
 
 st.set_page_config(page_title="Open Channel Flow Lab", page_icon="🌊", layout="wide")
-st.title("🌊 Open Channel Flow Lab · v8")
+st.title("🌊 Open Channel Flow Lab · v9")
 st.caption("Module 01 · Prismatic rectangular channel · Steady gradually varied flow")
 
 
@@ -353,151 +353,212 @@ with theory_tab:
     """)
 
 
-with exercise_tab:
-    st.header("Exercise 01 · Classify, identify, integrate")
-    st.markdown("""
-    A **prismatic rectangular channel** carries steady discharge.
-    Assume hydrostatic pressure, gradually varied flow and Manning resistance.
 
-    **Given data**
-    """)
-    st.table({
-        "Quantity": ["Discharge Q", "Width b", "Bed slope S₀",
-                     "Manning roughness n", "Downstream depth y(L)",
-                     "Integration step Δx", "Reach length L"],
-        "Value": ["3.00 m³/s", "3.00 m", "0.002 m/m",
-                  "0.025 s/m¹ᐟ³", "1.20 m", "2.00 m", "100 m"]
-    })
-    eq_q, eq_b, eq_s, eq_n = 3.0, 3.0, 0.002, 0.025
-    eq_yb, eq_dx, eq_L = 1.20, 2.0, 100.0
-    eq_yc = (eq_q**2 / (G * eq_b**2))**(1/3)
+with exercise_tab:
+    st.header("Exercise · Gradually Varied Flow")
+
+    # Each case is a complete, reproducible exercise. The button rotates
+    # through cases without changing the Toy or Theory.
+    cases = [
+        dict(Q=3.0, b=3.0, S0=0.002, n=0.025, yb=1.20, L=20.0, dx=2.0, side="downstream"),
+        dict(Q=3.0, b=3.0, S0=0.002, n=0.025, yb=0.70, L=20.0, dx=2.0, side="downstream"),
+        dict(Q=3.0, b=3.0, S0=0.020, n=0.025, yb=0.25, L=20.0, dx=2.0, side="upstream"),
+        dict(Q=3.0, b=3.0, S0=0.020, n=0.025, yb=0.43, L=20.0, dx=2.0, side="upstream"),
+        dict(Q=5.0, b=4.0, S0=0.0008, n=0.025, yb=1.40, L=20.0, dx=2.0, side="downstream"),
+    ]
+    if "exercise_case_index" not in st.session_state:
+        st.session_state.exercise_case_index = 0
+    if st.button("Generate another exercise", type="primary", key="new_exercise"):
+        st.session_state.exercise_case_index = (
+            st.session_state.exercise_case_index + 1
+        ) % len(cases)
+    ex = cases[st.session_state.exercise_case_index]
+    Qe, be, Se, ne = ex["Q"], ex["b"], ex["S0"], ex["n"]
+    yb_e, Le, dxe = ex["yb"], ex["L"], ex["dx"]
+    side_e = ex["side"]
+    st.caption(f"Exercise {st.session_state.exercise_case_index + 1} of {len(cases)}")
+
+    st.subheader("Problem statement")
+    st.markdown(
+        "Consider a **prismatic rectangular open channel** carrying a steady "
+        "discharge. The channel has constant bed slope and Manning roughness. "
+        "The following data are given:"
+    )
+    st.markdown(
+        f"""
+        - Discharge: **Q = {Qe:.2f} m³/s**
+        - Channel width: **b = {be:.2f} m**
+        - Bed slope: **S₀ = {Se:.4f} m/m**
+        - Manning roughness: **n = {ne:.3f} s/m¹ᐟ³**
+        - Prescribed **{side_e}** depth: **y = {yb_e:.3f} m**
+        - Channel length: **L = {Le:.0f} m**
+        - Spatial integration step: **Δx = {dxe:.1f} m**
+        """
+    )
+    st.markdown(
+        """
+        **Required**
+
+        1. Calculate normal and critical depths, then **classify the bed slope**.
+        2. **Identify the water-surface profile** and the correct integration direction.
+        3. **Integrate the profile** using the explicit method for prismatic
+           channels in Defina, §8.2.1. Show the first step and tabulate the
+           calculated water depths along the reach.
+        """
+    )
 
     def ex_sf(y):
-        A = eq_b*y
-        R = A/(eq_b+2*y)
-        return (eq_n*eq_q/(A*R**(2/3)))**2
+        A = be * y
+        R = A / (be + 2.0*y)
+        return (ne*Qe / (A*R**(2.0/3.0)))**2
 
-    lo, hi = 0.001, 10.0
-    for _ in range(90):
+    def ex_fr2(y):
+        return Qe**2 / (G*be**2*y**3)
+
+    lo, hi = 0.0001, 50.0
+    for _ in range(100):
         mid = (lo+hi)/2
-        if ex_sf(mid) > eq_s:
+        if ex_sf(mid) > Se:
             lo = mid
         else:
             hi = mid
-    eq_yn = (lo+hi)/2
-    eq_fr2 = eq_q**2/(G*eq_b**2*eq_yb**3)
-    eq_gradient = (eq_s-ex_sf(eq_yb))/(1-eq_fr2)
-    eq_first = eq_yb-eq_gradient*eq_dx
+    yn_e = (lo+hi)/2
+    yc_e = (Qe**2/(G*be**2))**(1.0/3.0)
+    slope_e = "Mild (M)" if yn_e > yc_e else "Steep (S)"
+    if yb_e > max(yn_e,yc_e):
+        zone_e = "1"
+    elif yb_e < min(yn_e,yc_e):
+        zone_e = "3"
+    else:
+        zone_e = "2"
+    profile_e = ("M" if yn_e > yc_e else "S") + zone_e
+    sub_e = yb_e > yc_e
+    expected_side = "downstream" if sub_e else "upstream"
 
-    st.subheader("1 · Classify the bed slope")
-    st.write("Determine the normal depth and critical depth, then classify the channel.")
-    slope_answer = st.radio(
-        "Slope classification", ["Choose an answer", "Mild (M)", "Steep (S)", "Critical (C)"],
-        key="ex_slope"
+    # The exercise set deliberately uses only physically consistent controls.
+    assert side_e == expected_side
+    direction_sign = -1 if sub_e else 1
+    x_start = Le if sub_e else 0.0
+    values = [(x_start, yb_e)]
+    stopped_reason = None
+    for k in range(round(Le/dxe)):
+        x_i, y_i = values[-1]
+        f2_i = ex_fr2(y_i)
+        if abs(1.0-f2_i) < 0.01:
+            stopped_reason = "critical flow approached"
+            break
+        dydx_i = (Se-ex_sf(y_i))/(1.0-f2_i)
+        y_next = y_i + direction_sign*dxe*dydx_i
+        if (not math.isfinite(y_next) or y_next <= 0
+                or (y_i-yc_e)*(y_next-yc_e) <= 0):
+            stopped_reason = "critical depth reached or crossed"
+            break
+        values.append((x_i+direction_sign*dxe, y_next))
+
+    st.divider()
+    st.subheader("Complete worked solution")
+    st.markdown("### 1. Bed-slope classification")
+    st.markdown("For a rectangular channel:")
+    st.latex(r"A=by,\qquad R=\frac{by}{b+2y}")
+    st.markdown("The normal depth is the positive solution of Manning's equation:")
+    st.latex(r"Q=\frac{1}{n}A(y_n)R(y_n)^{2/3}\sqrt{S_0}")
+    st.markdown(
+        f"Substituting **Q = {Qe:.2f} m³/s**, **b = {be:.2f} m**, "
+        f"**n = {ne:.3f}** and **S₀ = {Se:.4f}**, "
+        f"numerical solution gives **yₙ = {yn_e:.4f} m**."
     )
-    yn_answer = st.number_input("Your normal depth yₙ [m]", min_value=0.0,
-                                value=0.0, step=0.01, format="%.3f", key="ex_yn")
-    yc_answer = st.number_input("Your critical depth y꜀ [m]", min_value=0.0,
-                                value=0.0, step=0.01, format="%.3f", key="ex_yc")
-
-    st.subheader("2 · Identify the water-surface profile")
-    profile_answer = st.selectbox(
-        "Profile type", ["Choose an answer", "M1", "M2", "M3", "S1", "S2", "S3"],
-        key="ex_profile"
-    )
-    direction_answer = st.radio(
-        "Correct direction of integration",
-        ["Choose an answer", "From downstream to upstream", "From upstream to downstream"],
-        key="ex_direction"
+    st.latex(r"y_c=\left(\frac{Q^2}{gb^2}\right)^{1/3}")
+    st.markdown(
+        f"Therefore **y꜀ = {yc_e:.4f} m**. Since "
+        f"**yₙ {'>' if yn_e > yc_e else '<'} y꜀**, "
+        f"the channel has a **{slope_e.lower()}**."
     )
 
-    st.subheader("3 · Integrate the profile")
-    st.write(
-        "Use the **explicit method in Defina §8.2.1 (equation 100)**. "
-        "Starting at x = 100 m with y = 1.20 m, compute the depth "
-        "at x = 98 m using one step of Δx = 2 m."
+    st.markdown("### 2. Water-surface profile")
+    st.markdown(
+        f"The prescribed depth is **{yb_e:.3f} m**, compared with "
+        f"**yₙ = {yn_e:.4f} m** and **y꜀ = {yc_e:.4f} m**. "
+        f"It lies in **zone {zone_e}**; the profile is **{profile_e}**."
     )
-    first_answer = st.number_input(
-        "Calculated depth y(98 m) [m]", min_value=0.0, value=0.0,
-        step=0.001, format="%.4f", key="ex_first"
+    st.markdown(
+        f"At the control section, **Fr = {math.sqrt(ex_fr2(yb_e)):.3f}**. "
+        f"The flow is **{'subcritical' if sub_e else 'supercritical'}**. "
+        f"Therefore integration proceeds **{'upstream from the downstream boundary' if sub_e else 'downstream from the upstream boundary'}**."
     )
-    st.caption("Suggested tolerances: ±0.01 m for depths, ±0.002 m for the first integration step.")
 
-    if st.button("Check my answers", type="primary", key="ex_check"):
-        checks = [
-            ("Slope classification", slope_answer == "Mild (M)"),
-            ("Normal depth", abs(yn_answer-eq_yn) <= 0.01),
-            ("Critical depth", abs(yc_answer-eq_yc) <= 0.01),
-            ("Profile type", profile_answer == "M1"),
-            ("Integration direction", direction_answer == "From downstream to upstream"),
-            ("First integration step", abs(first_answer-eq_first) <= 0.002),
-        ]
-        st.session_state["exercise_checked"] = True
-        st.session_state["exercise_checks"] = checks
-
-    if st.session_state.get("exercise_checked", False):
-        checks = st.session_state["exercise_checks"]
-        st.metric("Correct answers", f"{sum(ok for _,ok in checks)} / {len(checks)}")
-        for label, ok in checks:
-            if ok:
-                st.success(f"{label}: correct")
-            else:
-                st.error(f"{label}: check your calculation or selection")
-
-        with st.expander("Show worked solution and integrated profile"):
-            st.markdown("**Step 1 — Normal and critical depths**")
-            st.latex(r"Q=\frac{1}{n}AR^{2/3}\sqrt{S_0},\qquad y_c=\left(\frac{Q^2}{gb^2}\right)^{1/3}")
-            st.write(f"yₙ = {eq_yn:.4f} m; y꜀ = {eq_yc:.4f} m. Since yₙ > y꜀, the slope is mild (M).")
-            st.markdown("**Step 2 — Profile type**")
-            st.write("The prescribed downstream depth exceeds both normal and critical depth: "
-                     "y(L) > yₙ > y꜀. The profile is **M1**, and integration proceeds upstream.")
-            st.markdown("**Step 3 — Explicit integration (equation 100)**")
-            st.latex(r"y_{i+1}=y_i-\left(\frac{S_0-j}{1-Fr^2}\right)_i\Delta x")
-            st.write(f"At y = 1.20 m: j = {ex_sf(eq_yb):.6f}, "
-                     f"Fr² = {eq_fr2:.4f}, dy/dx = {eq_gradient:.6f}.")
-            st.write(f"Therefore y(98 m) = {eq_first:.4f} m.")
-
-            # Explicit Euler, upstream from the downstream control.
-            ex_xs, ex_ys = [eq_L], [eq_yb]
-            for _ in range(int(eq_L/eq_dx)):
-                y = ex_ys[-1]
-                denom = 1-eq_q**2/(G*eq_b**2*y**3)
-                if abs(denom) < 0.002:
-                    st.warning("Integration stopped near critical depth.")
-                    break
-                y_next = y-(eq_s-ex_sf(y))/denom*eq_dx
-                if y_next <= 0 or not math.isfinite(y_next):
-                    st.warning("Integration stopped at an invalid depth.")
-                    break
-                ex_xs.append(ex_xs[-1]-eq_dx)
-                ex_ys.append(y_next)
-
-            import plotly.graph_objects as go
-            x_plot = list(reversed(ex_xs))
-            y_plot = list(reversed(ex_ys))
-            bed = [-eq_s*x for x in x_plot]
-            fig_ex = go.Figure()
-            fig_ex.add_trace(go.Scatter(x=x_plot, y=bed, mode="lines",
-                                        name="Channel bed", line=dict(color="#555555",width=3)))
-            fig_ex.add_trace(go.Scatter(x=x_plot, y=[z+eq_yn for z in bed],
-                                        mode="lines", name="Normal depth",
-                                        line=dict(color="#18a558",dash="dash")))
-            fig_ex.add_trace(go.Scatter(x=x_plot, y=[z+eq_yc for z in bed],
-                                        mode="lines", name="Critical depth",
-                                        line=dict(color="#e53935",dash="dot")))
-            fig_ex.add_trace(go.Scatter(x=x_plot, y=[z+y for z,y in zip(bed,y_plot)],
-                                        mode="lines", name="Water surface",
-                                        line=dict(color="#1684c5",width=4)))
-            fig_ex.add_trace(go.Scatter(x=[eq_L], y=[-eq_s*eq_L+eq_yb],
-                                        mode="markers", name="Boundary condition",
-                                        marker=dict(symbol="circle-open",size=15,
-                                                    color="#005b9f",line=dict(width=3))))
-            fig_ex.update_layout(title="Integrated M1 profile · Explicit method",
-                                 xaxis_title="Distance x [m]",
-                                 yaxis_title="Relative elevation [m]",
-                                 height=520, legend=dict(orientation="h",y=-0.25))
-            st.plotly_chart(fig_ex, use_container_width=True)
-            st.caption("The profile is computed with the explicit spatial scheme "
-                       "and Δx = 2 m. The inclined bed and water-surface elevations "
-                       "are plotted without vertical exaggeration.")
-
+    st.markdown("### 3. Numerical integration")
+    st.markdown(
+        "For a prismatic channel, Defina §8.2.1 prescribes the explicit "
+        "step-by-step form of the GVF equation:"
+    )
+    st.latex(r"\frac{dy}{dx}=\frac{S_0-j}{1-Fr^2}")
+    if sub_e:
+        st.latex(r"y_{i+1}=y_i-\left(\frac{S_0-j}{1-Fr^2}\right)_i\Delta x")
+        st.caption("Equation (100): subcritical flow, integrating upstream.")
+    else:
+        st.latex(r"y_{i+1}=y_i+\left(\frac{S_0-j}{1-Fr^2}\right)_i\Delta x")
+        st.caption("Equation (101): supercritical flow, integrating downstream.")
+    j0 = ex_sf(yb_e)
+    fr20 = ex_fr2(yb_e)
+    slope0 = (Se-j0)/(1-fr20)
+    st.markdown(
+        f"**First step:** at the prescribed section, "
+        f"\\(j_0 = {j0:.6f}\\), \\(Fr_0^2 = {fr20:.5f}\\), "
+        f"and \\((dy/dx)_0 = {slope0:.6f}\\). "
+        f"With \\(\\Delta x = {dxe:.1f}\\) m, "
+        f"the next depth is **y₁ = {values[1][1]:.5f} m**."
+        if len(values)>1 else
+        "**Integration cannot start because the control is too close to critical flow.**"
+    )
+    st.markdown("**Step-by-step integration table**")
+    rows = []
+    for k,(x_i,y_i) in enumerate(values):
+        rows.append({
+            "Step": k,
+            "x [m]": round(x_i, 2),
+            "y [m]": round(y_i, 5),
+            "j [-]": round(ex_sf(y_i), 6),
+            "Fr [-]": round(math.sqrt(ex_fr2(y_i)), 4),
+        })
+    st.dataframe(rows, hide_index=True, use_container_width=True)
+    if stopped_reason:
+        st.warning(f"Integration stopped: {stopped_reason}.")
+    st.markdown(
+        f"**Result:** after {len(values)-1} integration steps, "
+        f"the calculated depth at x = {values[-1][0]:.1f} m "
+        f"is **y = {values[-1][1]:.5f} m**."
+    )
+    import plotly.graph_objects as go
+    xy = sorted(values)
+    xp_e = [p[0] for p in xy]
+    bed_e = [-Se*x for x in xp_e]
+    fig_e = go.Figure()
+    fig_e.add_trace(go.Scatter(
+        x=xp_e, y=bed_e, mode="lines", name="Channel bed",
+        line=dict(color="#555555", width=3)))
+    fig_e.add_trace(go.Scatter(
+        x=xp_e, y=[z+yn_e for z in bed_e], mode="lines",
+        name="Normal depth", line=dict(color="#16a34a", dash="dash")))
+    fig_e.add_trace(go.Scatter(
+        x=xp_e, y=[z+yc_e for z in bed_e], mode="lines",
+        name="Critical depth", line=dict(color="#dc2626", dash="dot")))
+    fig_e.add_trace(go.Scatter(
+        x=xp_e, y=[z+y for z,(_,y) in zip(bed_e,xy)], mode="lines+markers",
+        name="Water surface", line=dict(color="#1684c5", width=3),
+        marker=dict(size=4)))
+    fig_e.add_trace(go.Scatter(
+        x=[x_start], y=[-Se*x_start+yb_e], mode="markers",
+        name="Boundary condition",
+        marker=dict(symbol="circle-open", size=15,
+                    color="#005b9f", line=dict(width=3))))
+    fig_e.update_layout(
+        title=f"{profile_e} water-surface profile",
+        xaxis_title="Distance x [m]",
+        yaxis_title="Relative elevation [m]",
+        height=480, legend=dict(orientation="h", y=-0.3))
+    st.plotly_chart(fig_e, use_container_width=True)
+    st.caption(
+        "Reference: Andrea Defina, §8.2.1, equations (99)–(101). "
+        "Explicit spatial integration with the stated fixed step. "
+        "The channel bed is always inclined."
+    )
