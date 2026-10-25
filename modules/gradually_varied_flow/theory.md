@@ -2,7 +2,7 @@
 
 For steady, gradually varied flow in a prismatic channel, let $s$ increase downstream, $i$ be the bed slope, and $j$ be the friction slope.
 
-The handwritten notes begin from the energy equation:
+The energy equation reads as follows:
 
 $$
 \frac{dE}{ds}=i-j
