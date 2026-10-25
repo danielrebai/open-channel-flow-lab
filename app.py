@@ -1,4 +1,5 @@
 import math
+import random
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
@@ -6,7 +7,7 @@ import streamlit as st
 G = 9.81
 
 st.set_page_config(page_title="Open Channel Flow Lab", page_icon="🌊", layout="wide")
-st.title("🌊 Open Channel Flow Lab · v10")
+st.title("🌊 Open Channel Flow Lab · v11")
 st.caption("Module 01 · Prismatic rectangular channel · Steady gradually varied flow")
 
 
@@ -358,26 +359,83 @@ with theory_tab:
 with exercise_tab:
     st.header("Exercise · Gradually Varied Flow")
 
-    # Each case is a complete, reproducible exercise. The button rotates
-    # through cases without changing the Toy or Theory.
-    cases = [
-        dict(Q=3.0, b=3.0, S0=0.002, n=0.025, yb=1.20, L=20.0, dx=2.0, side="downstream"),
-        dict(Q=3.0, b=3.0, S0=0.002, n=0.025, yb=0.70, L=20.0, dx=2.0, side="downstream"),
-        dict(Q=3.0, b=3.0, S0=0.020, n=0.025, yb=0.25, L=20.0, dx=2.0, side="upstream"),
-        dict(Q=3.0, b=3.0, S0=0.020, n=0.025, yb=0.43, L=20.0, dx=2.0, side="upstream"),
-        dict(Q=5.0, b=4.0, S0=0.0008, n=0.025, yb=1.40, L=20.0, dx=2.0, side="downstream"),
-    ]
-    if "exercise_case_index" not in st.session_state:
-        st.session_state.exercise_case_index = 0
+    # Generate hydraulically admissible, numerically verified exercises.
+    # A dedicated random generator avoids changing other app controls.
+    def make_exercise():
+        rng = random.SystemRandom()
+        for _ in range(3000):
+            Q = round(rng.uniform(1.5, 8.0), 2)
+            b = round(rng.uniform(2.5, 7.0), 2)
+            n = round(rng.uniform(0.018, 0.035), 3)
+            yc = (Q**2 / (G*b**2))**(1/3)
+            target = rng.choice(["M1", "M2", "M3", "S1", "S2", "S3"])
+            # Specify normal depth first; derive the bed slope from Manning.
+            yn = yc*rng.uniform(1.35, 2.2) if target[0] == "M" else yc*rng.uniform(0.55, 0.77)
+            A, R = b*yn, b*yn/(b+2*yn)
+            S0 = (n*Q/(A*R**(2/3)))**2
+            S0 = round(S0, 6)
+            if not 0.0001 <= S0 <= 0.08:
+                continue
+            # Recompute the normal depth for the displayed, rounded slope.
+            lo, hi = 0.0001, 50.0
+            for _ in range(90):
+                mid = (lo+hi)/2
+                am, rm = b*mid, b*mid/(b+2*mid)
+                if (n*Q/(am*rm**(2/3)))**2 > S0:
+                    lo = mid
+                else:
+                    hi = mid
+            yn = (lo+hi)/2
+            if (yn > yc) != (target[0] == "M"):
+                continue
+            if target[1] == "1":
+                yb = max(yn,yc)*rng.uniform(1.12,1.45)
+            elif target[1] == "2":
+                yb = min(yn,yc) + rng.uniform(0.32,0.68)*abs(yn-yc)
+            else:
+                yb = min(yn,yc)*rng.uniform(0.63,0.82)
+            yb = round(yb,4)
+            if abs(yb-yc)/yc < 0.06:
+                continue
+            sub = yb > yc
+            side = "downstream" if sub else "upstream"
+            dx = round(min(1.0, (0.55 if sub else 0.25)*yb), 2)
+            if dx < 0.05:
+                continue
+            N = 12
+            L = round(N*dx, 2)
+            sign = -1 if sub else 1
+            y = yb
+            valid = True
+            for _ in range(N):
+                A, R = b*y, b*y/(b+2*y)
+                j = (n*Q/(A*R**(2/3)))**2
+                fr2 = Q**2/(G*b**2*y**3)
+                if abs(1-fr2) < 0.08:
+                    valid = False
+                    break
+                ynext = y + sign*dx*(S0-j)/(1-fr2)
+                if (not math.isfinite(ynext) or ynext <= 0 or
+                    (ynext-yc)*(y-yc) <= 0 or
+                    abs(ynext-y)/y > 0.08):
+                    valid = False
+                    break
+                y = ynext
+            if valid and abs(y-yb)>0.0005:
+                return dict(Q=Q,b=b,S0=S0,n=n,yb=yb,L=L,dx=dx,side=side)
+        raise RuntimeError("Could not generate a valid exercise; please retry.")
+
+    if "exercise_case" not in st.session_state:
+        st.session_state.exercise_case = make_exercise()
+        st.session_state.exercise_number = 1
     if st.button("Generate another exercise", type="primary", key="new_exercise"):
-        st.session_state.exercise_case_index = (
-            st.session_state.exercise_case_index + 1
-        ) % len(cases)
-    ex = cases[st.session_state.exercise_case_index]
+        st.session_state.exercise_case = make_exercise()
+        st.session_state.exercise_number += 1
+    ex = st.session_state.exercise_case
     Qe, be, Se, ne = ex["Q"], ex["b"], ex["S0"], ex["n"]
     yb_e, Le, dxe = ex["yb"], ex["L"], ex["dx"]
     side_e = ex["side"]
-    st.caption(f"Exercise {st.session_state.exercise_case_index + 1} of {len(cases)}")
+    st.caption(f"Exercise {st.session_state.exercise_number} · Randomly generated and numerically checked")
 
     st.subheader("Problem statement")
     st.markdown(
@@ -507,7 +565,8 @@ with exercise_tab:
         f"\\(j_0 = {j0:.6f}\\), \\(Fr_0^2 = {fr20:.5f}\\), "
         f"and \\((dy/dx)_0 = {slope0:.6f}\\). "
         f"With \\(\\Delta x = {dxe:.1f}\\) m, "
-        f"the next depth is **y₁ = {values[1][1]:.5f} m**."
+        f"the next depth is **y₁ = {yb_e:.4f} {'-' if sub_e else '+'} "
+        f"({dxe:.2f})({slope0:.6f}) = {values[1][1]:.5f} m**."
         if len(values)>1 else
         "**Integration cannot start because the control is too close to critical flow.**"
     )
