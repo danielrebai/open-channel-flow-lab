@@ -7,7 +7,7 @@ import streamlit as st
 G = 9.81
 
 st.set_page_config(page_title="Open Channel Flow Lab", page_icon="🌊", layout="wide")
-st.title("🌊 Open Channel Flow Lab · v11")
+st.title("🌊 Open Channel Flow Lab · v12")
 st.caption("Module 01 · Prismatic rectangular channel · Steady gradually varied flow")
 
 
@@ -437,32 +437,31 @@ with exercise_tab:
     side_e = ex["side"]
     st.caption(f"Exercise {st.session_state.exercise_number} · Randomly generated and numerically checked")
 
+
     st.subheader("Problem statement")
     st.markdown(
-        "Consider a **prismatic rectangular open channel** carrying a steady "
-        "discharge. The channel has constant bed slope and Manning roughness. "
-        "The following data are given:"
+        "Consider steady, gradually varied flow in a **prismatic rectangular "
+        "channel**. Assume constant discharge, bed slope and Manning roughness."
+    )
+    st.markdown("#### Given data")
+    st.latex(
+        rf"\begin{{aligned}}"
+        rf"Q &= {Qe:.2f}\ \mathrm{{m^3/s}} &"
+        rf"b &= {be:.2f}\ \mathrm{{m}}\\"
+        rf"S_0 &= {Se:.6f} &"
+        rf"n &= {ne:.3f}\ \mathrm{{s/m^{{1/3}}}}\\"
+        rf"y_{{\mathrm{{{side_e}}}}} &= {yb_e:.4f}\ \mathrm{{m}} &"
+        rf"L &= {Le:.2f}\ \mathrm{{m}}\\"
+        rf"\Delta x &= {dxe:.2f}\ \mathrm{{m}}"
+        rf"\end{{aligned}}"
     )
     st.markdown(
-        f"""
-        - Discharge: **Q = {Qe:.2f} m³/s**
-        - Channel width: **b = {be:.2f} m**
-        - Bed slope: **S₀ = {Se:.4f} m/m**
-        - Manning roughness: **n = {ne:.3f} s/m¹ᐟ³**
-        - Prescribed **{side_e}** depth: **y = {yb_e:.3f} m**
-        - Channel length: **L = {Le:.0f} m**
-        - Spatial integration step: **Δx = {dxe:.1f} m**
         """
-    )
-    st.markdown(
-        """
-        **Required**
-
-        1. Calculate normal and critical depths, then **classify the bed slope**.
-        2. **Identify the water-surface profile** and the correct integration direction.
-        3. **Integrate the profile** using the explicit method for prismatic
-           channels in Defina, §8.2.1. Show the first step and tabulate the
-           calculated water depths along the reach.
+        #### Required
+        1. **Classify the bed slope.** Compute the normal depth and critical depth.
+        2. **Identify the profile.** Determine the profile family and the correct integration direction.
+        3. **Integrate the profile.** Apply the explicit spatial method in
+           Defina, §8.2.1; show the first step and tabulate the result.
         """
     )
 
@@ -514,62 +513,85 @@ with exercise_tab:
             break
         values.append((x_i+direction_sign*dxe, y_next))
 
+
     st.divider()
     st.subheader("Complete worked solution")
     st.markdown("### 1. Bed-slope classification")
-    st.markdown("For a rectangular channel:")
-    st.latex(r"A=by,\qquad R=\frac{by}{b+2y}")
-    st.markdown("The normal depth is the positive solution of Manning's equation:")
-    st.latex(r"Q=\frac{1}{n}A(y_n)R(y_n)^{2/3}\sqrt{S_0}")
-    st.markdown(
-        f"Substituting **Q = {Qe:.2f} m³/s**, **b = {be:.2f} m**, "
-        f"**n = {ne:.3f}** and **S₀ = {Se:.4f}**, "
-        f"numerical solution gives **yₙ = {yn_e:.4f} m**."
+    st.markdown("For a rectangular channel, the area and hydraulic radius are")
+    st.latex(r"A(y)=by,\qquad R(y)=\frac{by}{b+2y}.")
+    st.markdown("The normal depth satisfies Manning's uniform-flow equation:")
+    st.latex(r"Q=\frac{1}{n}A(y_n)R(y_n)^{2/3}\sqrt{S_0}.")
+    st.latex(
+        rf"{Qe:.2f}=\frac{{1}}{{{ne:.3f}}}"
+        rf"({be:.2f}\,y_n)"
+        rf"\left(\frac{{{be:.2f}\,y_n}}{{{be:.2f}+2y_n}}\right)^{{2/3}}"
+        rf"\sqrt{{{Se:.6f}}}"
     )
-    st.latex(r"y_c=\left(\frac{Q^2}{gb^2}\right)^{1/3}")
-    st.markdown(
-        f"Therefore **y꜀ = {yc_e:.4f} m**. Since "
-        f"**yₙ {'>' if yn_e > yc_e else '<'} y꜀**, "
-        f"the channel has a **{slope_e.lower()}**."
+    st.latex(rf"\boxed{{y_n={yn_e:.4f}\ \mathrm{{m}}}}")
+    st.markdown("The critical depth follows from the critical-flow condition:")
+    st.latex(r"Fr=1,\qquad y_c=\left(\frac{Q^2}{gb^2}\right)^{1/3}.")
+    st.latex(
+        rf"y_c=\left(\frac{{{Qe:.2f}^2}}{{{G:.2f}\cdot {be:.2f}^2}}\right)^{{1/3}}"
+        rf"=\boxed{{{yc_e:.4f}\ \mathrm{{m}}}}"
     )
+    comparison = ">" if yn_e > yc_e else "<"
+    st.latex(rf"y_n\;{comparison}\;y_c\quad\Longrightarrow\quad"
+             rf"\boxed{{\text{{{slope_e}}}}}")
 
     st.markdown("### 2. Water-surface profile")
-    st.markdown(
-        f"The prescribed depth is **{yb_e:.3f} m**, compared with "
-        f"**yₙ = {yn_e:.4f} m** and **y꜀ = {yc_e:.4f} m**. "
-        f"It lies in **zone {zone_e}**; the profile is **{profile_e}**."
+    if zone_e == "1":
+        relation = rf"{yb_e:.4f}>\max({yn_e:.4f},\,{yc_e:.4f})"
+    elif zone_e == "3":
+        relation = rf"{yb_e:.4f}<\min({yn_e:.4f},\,{yc_e:.4f})"
+    else:
+        relation = (rf"{min(yn_e,yc_e):.4f}<{yb_e:.4f}"
+                    rf"<{max(yn_e,yc_e):.4f}")
+    st.latex(relation)
+    st.latex(rf"\boxed{{\text{{Profile {profile_e}}}}}")
+    st.markdown("At the prescribed boundary, the Froude number is")
+    st.latex(
+        rf"Fr=\sqrt{{\frac{{Q^2}}{{g\,b^2\,y^3}}}}"
+        rf"=\boxed{{{math.sqrt(ex_fr2(yb_e)):.4f}}}"
     )
     st.markdown(
-        f"At the control section, **Fr = {math.sqrt(ex_fr2(yb_e)):.3f}**. "
-        f"The flow is **{'subcritical' if sub_e else 'supercritical'}**. "
-        f"Therefore integration proceeds **{'upstream from the downstream boundary' if sub_e else 'downstream from the upstream boundary'}**."
+        f"The flow is **{'subcritical' if sub_e else 'supercritical'}**; "
+        f"the depth must be prescribed **{side_e}**, and integration proceeds "
+        f"**{'upstream' if sub_e else 'downstream'}**."
     )
 
     st.markdown("### 3. Numerical integration")
-    st.markdown(
-        "For a prismatic channel, Defina §8.2.1 prescribes the explicit "
-        "step-by-step form of the GVF equation:"
-    )
-    st.latex(r"\frac{dy}{dx}=\frac{S_0-j}{1-Fr^2}")
+    st.markdown("The gradually varied flow equation is")
+    st.latex(r"\frac{dy}{dx}=\frac{S_0-j}{1-Fr^2},\qquad"
+             r"j=\left(\frac{nQ}{AR^{2/3}}\right)^2.")
+    st.markdown("The explicit spatial discretization is")
     if sub_e:
-        st.latex(r"y_{i+1}=y_i-\left(\frac{S_0-j}{1-Fr^2}\right)_i\Delta x")
-        st.caption("Equation (100): subcritical flow, integrating upstream.")
+        st.latex(r"\boxed{y_{i+1}=y_i-\left(\frac{S_0-j}{1-Fr^2}\right)_i\Delta x}")
+        st.caption("Defina, equation (100): integrate from downstream to upstream.")
     else:
-        st.latex(r"y_{i+1}=y_i+\left(\frac{S_0-j}{1-Fr^2}\right)_i\Delta x")
-        st.caption("Equation (101): supercritical flow, integrating downstream.")
+        st.latex(r"\boxed{y_{i+1}=y_i+\left(\frac{S_0-j}{1-Fr^2}\right)_i\Delta x}")
+        st.caption("Defina, equation (101): integrate from upstream to downstream.")
     j0 = ex_sf(yb_e)
     fr20 = ex_fr2(yb_e)
     slope0 = (Se-j0)/(1-fr20)
-    st.markdown(
-        f"**First step:** at the prescribed section, "
-        f"\\(j_0 = {j0:.6f}\\), \\(Fr_0^2 = {fr20:.5f}\\), "
-        f"and \\((dy/dx)_0 = {slope0:.6f}\\). "
-        f"With \\(\\Delta x = {dxe:.1f}\\) m, "
-        f"the next depth is **y₁ = {yb_e:.4f} {'-' if sub_e else '+'} "
-        f"({dxe:.2f})({slope0:.6f}) = {values[1][1]:.5f} m**."
-        if len(values)>1 else
-        "**Integration cannot start because the control is too close to critical flow.**"
+    st.markdown("#### First integration step")
+    st.latex(
+        rf"\begin{{aligned}}"
+        rf"j_0 &= {j0:.7f}\\"
+        rf"Fr_0^2 &= {fr20:.6f}\\"
+        rf"\left(\frac{{dy}}{{dx}}\right)_0"
+        rf"&=\frac{{{Se:.6f}-{j0:.7f}}}{{1-{fr20:.6f}}}"
+        rf"={slope0:.7f}"
+        rf"\end{{aligned}}"
     )
+    if len(values)>1:
+        op = "-" if sub_e else "+"
+        st.latex(
+            rf"y_1={yb_e:.4f}\;{op}\;({dxe:.2f})({slope0:.7f})"
+            rf"=\boxed{{{values[1][1]:.5f}\ \mathrm{{m}}}}"
+        )
+    else:
+        st.warning("Integration cannot start sufficiently far from critical flow.")
+
     st.markdown("**Step-by-step integration table**")
     rows = []
     for k,(x_i,y_i) in enumerate(values):
@@ -583,11 +605,9 @@ with exercise_tab:
     st.dataframe(rows, hide_index=True, use_container_width=True)
     if stopped_reason:
         st.warning(f"Integration stopped: {stopped_reason}.")
-    st.markdown(
-        f"**Result:** after {len(values)-1} integration steps, "
-        f"the calculated depth at x = {values[-1][0]:.1f} m "
-        f"is **y = {values[-1][1]:.5f} m**."
-    )
+    st.markdown(f"After **{len(values)-1} steps**, the final calculated depth is")
+    st.latex(rf"\\boxed{{y(x={values[-1][0]:.2f}\\,\\mathrm{{m}})"
+             rf"={values[-1][1]:.5f}\\,\\mathrm{{m}}}}")
     import plotly.graph_objects as go
     xy = sorted(values)
     xp_e = [p[0] for p in xy]
