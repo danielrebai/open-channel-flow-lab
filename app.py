@@ -7,7 +7,7 @@ import streamlit as st
 G = 9.81
 
 st.set_page_config(page_title="Open Channel Flow Lab", page_icon="🌊", layout="wide")
-st.title("🌊 Open Channel Flow Lab · v12")
+st.title("🌊 Open Channel Flow Lab · v13")
 st.caption("Module 01 · Prismatic rectangular channel · Steady gradually varied flow")
 
 
@@ -241,120 +241,217 @@ with toy_tab:
 
 
 with theory_tab:
-
     st.header("Theory · Gradually Varied Flow")
+    st.caption(
+        "Adapted from the uploaded handwritten notes, pp. 1–12 "
+        "(manuscript pages 20–31). Numerical integration: Defina, §8.2.1."
+    )
+
     st.markdown("""
-    ### 1. Physical model and assumptions
+    ### 1. Governing equation and physical meaning
 
-    We consider **steady, one-dimensional, gradually varied flow** in a
-    **prismatic rectangular open channel**. The discharge, width, bed slope and
-    Manning roughness are constant along the channel.
-
-    The gradually varied flow approximation assumes nearly hydrostatic pressure
-    distribution, small streamline curvature and sufficiently gradual changes in
-    depth. Hydraulic jumps, gates and other rapidly varied transitions are **not**
-    described by this equation.
-
-    ### 2. Channel geometry and hydraulic quantities
-
-    For a rectangular section of width \\(b\\) and water depth \\(y\\):
+    Consider steady, gradually varied flow in a prismatic channel.
+    Let **s increase downstream**, let **i** denote the bed slope,
+    and let **j** denote the friction slope (energy loss per unit length).
+    The notes begin with the energy equation:
     """)
-    st.latex(r"A=by,\qquad P=b+2y,\qquad R=\frac{A}{P}")
-    st.latex(r"V=\frac{Q}{A},\qquad Fr^2=\frac{Q^2b}{gA^3}=\frac{Q^2}{gb^2y^3}")
-    st.markdown("The **critical depth** is obtained by imposing \\(Fr=1\\):")
-    st.latex(r"y_c=\left(\frac{Q^2}{gb^2}\right)^{1/3}")
+    st.latex(r"\frac{dE}{ds}=i-j")
+    st.markdown(
+        "For a fixed discharge, the specific energy is a function of depth. "
+        "Applying the chain rule gives the fundamental profile equation:"
+    )
+    st.latex(
+        r"\frac{dE}{ds}=\frac{dE}{dh}\frac{dh}{ds}=i-j"
+    )
+    st.latex(
+        r"\boxed{\frac{dh}{ds}=\frac{i-j}{dE/dh}}"
+    )
+    st.markdown(
+        "This is the central reasoning in the handwritten notes: "
+        "**the sign of the depth gradient follows from the signs of "
+        "the energy gradient and of the friction imbalance**. "
+        "For a rectangular channel, the specific energy and its derivative are:"
+    )
+    st.latex(
+        r"E(h)=h+\frac{Q^2}{2gb^2h^2},\qquad "
+        r"\frac{dE}{dh}=1-Fr^2"
+    )
+    st.latex(
+        r"\boxed{\frac{dh}{ds}=\frac{i-j}{1-Fr^2}},\qquad "
+        r"Fr^2=\frac{Q^2}{gb^2h^3}"
+    )
     st.markdown("""
-    ### 3. Friction and uniform flow
-
-    With Manning's resistance law, the energy (friction) slope is
-    """)
-    st.latex(r"j=S_f=\left(\frac{nQ}{AR^{2/3}}\right)^2")
-    st.markdown("""
-    **Uniform flow** occurs when friction slope equals bed slope:
-    \\(j=S_0\\). The corresponding **normal depth** \\(y_n\\) is obtained
-    numerically from Manning's equation:
-    """)
-    st.latex(r"Q=\frac{1}{n}A(y_n)R(y_n)^{2/3}\sqrt{S_0}")
-    st.markdown("""
-    ### 4. Governing equation
-
-    Let \\(x\\) increase **downstream** and let \\(S_0\\) be the positive
-    downward bed slope. For a prismatic channel, the gradually varied flow
-    equation is
-    """)
-    st.latex(r"\boxed{\frac{dy}{dx}=\frac{S_0-j}{1-Fr^2}}")
-    st.markdown("""
-    The numerator compares bed slope and friction losses; the denominator
-    expresses the effect of flow regime. At \\(Fr=1\\), this form is
-    singular, so an ordinary GVF integration cannot be continued through
-    critical flow.
-
-    ### 5. Flow regimes and profile families
-
-    A channel is classified by comparing normal and critical depths:
-    """)
-    st.markdown("""
-    - **Mild slope (M):** \\(y_n>y_c\\).
-    - **Steep slope (S):** \\(y_n<y_c\\).
-    - **Critical slope (C):** \\(y_n=y_c\\).
-
-    Within an M or S channel, the digit 1, 2 or 3 identifies the position
-    of the local depth relative to \\(y_n\\) and \\(y_c\\):
-    **Zone 1** is above both, **Zone 2** lies between them, and
-    **Zone 3** is below both. This gives the familiar M1–M3 and S1–S3
-    families.
-
-    ### 6. Boundary conditions and direction of integration
-
-    The mathematical integration direction follows the physical propagation
-    of control:
-
-    - **Subcritical flow** (\\(Fr<1\\)): prescribe a downstream depth and
-      integrate **upstream**.
-    - **Supercritical flow** (\\(Fr>1\\)): prescribe an upstream depth and
-      integrate **downstream**.
-
-    For this introductory model, a depth specified at the non-controlling
-    end is rejected. A critical control requires a separate treatment.
-
-    ### 7. Numerical integration — Defina, §8.2.1
-
-    The reference document recommends an **explicit spatial integration**
-    for prismatic channels. Starting from section \\(i\\), the discrete
-    governing equation is
-    """)
-    st.latex(r"\frac{y_{i+1}-y_i}{x_{i+1}-x_i}=\left(\frac{S_0-j}{1-Fr^2}\right)_i")
-    st.markdown("**Subcritical flow — from downstream to upstream**, with \\(\\Delta x=x_i-x_{i+1}>0\\) (equation 100):")
-    st.latex(r"\boxed{y_{i+1}=y_i-\left(\frac{S_0-j}{1-Fr^2}\right)_i\Delta x}")
-    st.markdown("**Supercritical flow — from upstream to downstream**, with \\(\\Delta x=x_{i+1}-x_i>0\\) (equation 101):")
-    st.latex(r"\boxed{y_{i+1}=y_i+\left(\frac{S_0-j}{1-Fr^2}\right)_i\Delta x}")
-    st.markdown("""
-    The text suggests steps of approximately **1–10 times the depth**
-    for subcritical flow, and **0.5–2 times the depth** for supercritical
-    flow, reduced near critical conditions. The app uses depth-dependent
-    steps and additional numerical safeguards; these safeguards are
-    implementation choices, not separate equations from the reference.
-
-    ### 8. How to interpret the Toy
-
-    The **blue curve** is the calculated water surface, the **green dashed
-    line** represents uniform flow (normal depth), and the **red dotted
-    line** represents critical depth. The **outlined circle** marks the
-    prescribed boundary condition.
-
-    The bed is always shown inclined. For legibility, depths above the
-    inclined bed may be vertically exaggerated in the display. This does
-    **not** alter the calculated hydraulic depths.
-
-    **Reference:** Andrea Defina, *Profili di moto permanente* (2010),
-    Section 8.2.1, equations (99)–(101), printed pages 129–130.
-
-    **Scope:** This module models only gradually varied flow in a prismatic
-    rectangular channel. It is not a solver for hydraulic jumps or local
-    hydraulic structures.
+    The manuscript uses **h** for water depth, **k** for critical depth,
+    and **h₀** for normal depth. The Toy uses the equivalent symbols
+    **y**, **y꜀** and **yₙ**.
     """)
 
+    st.markdown("""
+    ### 2. Critical and normal depths
 
+    At critical flow, the specific energy reaches its minimum:
+    """)
+    st.latex(r"\left.\frac{dE}{dh}\right|_{h=k}=0,\qquad Fr=1")
+    st.latex(r"k=\left(\frac{Q^2}{gb^2}\right)^{1/3}")
+    st.markdown(
+        "For a rectangular channel, Manning's law gives the friction slope:"
+    )
+    st.latex(
+        r"A=bh,\quad R=\frac{bh}{b+2h},\quad "
+        r"j(h)=\left(\frac{nQ}{AR^{2/3}}\right)^2"
+    )
+    st.markdown(
+        "In a channel with positive bed slope, normal depth h₀ is "
+        "defined by the uniform-flow condition:"
+    )
+    st.latex(r"j(h_0)=i")
+    st.markdown(
+        "The notes emphasize two characteristic depths. At **h = k**, "
+        "the denominator of the GVF equation vanishes; at **h = h₀**, "
+        "the numerator vanishes. These have different physical meanings."
+    )
+
+    st.markdown("### 3. Signs and asymptotic behavior")
+    st.markdown(
+        "The sign chart below follows the handwritten analysis "
+        "(especially manuscript pp. 20–21):"
+    )
+    st.table({
+        "Condition": ["h < k", "h = k", "h > k",
+                      "h = h₀ (positive slope)"],
+        "Sign / consequence": [
+            "dE/dh < 0: supercritical",
+            "dE/dh = 0: critical-flow singularity",
+            "dE/dh > 0: subcritical",
+            "i − j = 0: uniform-flow equilibrium"
+        ]
+    })
+    st.markdown("""
+    As **h approaches h₀**, the depth gradient tends to zero and the
+    profile approaches uniform flow asymptotically.
+
+    At **h = k**, the denominator vanishes. A regular gradually varied
+    profile cannot generally be continued through this point using the
+    ordinary GVF equation. The notes identify the resulting limiting
+    behavior as a **vertical tangent** in the depth profile, except
+    for special cases requiring separate analysis.
+    """)
+
+    st.markdown("### 4. Mild-slope channels")
+    st.latex(r"\boxed{h_0>k}")
+    st.markdown(
+        "The manuscript discusses the three mild-slope profiles "
+        "(pp. 22–23). Their classification follows directly from "
+        "the relative position of the water depth:"
+    )
+    st.table({
+        "Profile": ["M1", "M2", "M3"],
+        "Depth range": ["h > h₀ > k", "k < h < h₀", "h < k < h₀"],
+        "dh/ds": ["Positive", "Negative", "Positive"],
+        "Regime": ["Subcritical", "Subcritical", "Supercritical"]
+    })
+    st.markdown("""
+    - **M1:** a backwater curve above normal depth; it approaches
+      uniform flow in the upstream direction.
+    - **M2:** a drawdown curve between normal and critical depths.
+    - **M3:** a supercritical profile below critical depth.
+
+    The critical depth and normal depth are not interchangeable:
+    one is determined by specific energy, the other by friction balance.
+    """)
+
+    st.markdown("### 5. Steep-slope channels")
+    st.latex(r"\boxed{h_0<k}")
+    st.markdown(
+        "For steep channels, the notes classify the profiles "
+        "as follows (pp. 24–25):"
+    )
+    st.table({
+        "Profile": ["S1", "S2", "S3"],
+        "Depth range": ["h > k > h₀", "h₀ < h < k", "h < h₀ < k"],
+        "dh/ds": ["Positive", "Negative", "Positive"],
+        "Regime": ["Subcritical", "Supercritical", "Supercritical"]
+    })
+    st.markdown("""
+    The signs result from combining **i − j** with **dE/dh**.
+    In particular, **S1** is subcritical even though the channel
+    is steep: the channel classification and the *local* flow regime
+    are distinct concepts.
+    """)
+
+    st.markdown("### 6. Horizontal and adverse slopes")
+    st.markdown(
+        "The manuscript also considers **horizontal channels** "
+        "(page 26) and introduces **negative/adverse slopes** "
+        "(page 27). These are part of the theory, but the current "
+        "Toy and Exercise solvers are restricted to **i > 0**."
+    )
+    st.latex(r"i=0\quad\Longrightarrow\quad i-j=-j<0")
+    st.markdown(
+        "For a horizontal channel, the sign of dh/ds is therefore "
+        "opposite to the sign of dE/dh. In an adverse channel "
+        "(i < 0), the numerator i − j is likewise negative for "
+        "positive friction losses. Neither case has a finite normal "
+        "depth defined by j = i with j > 0."
+    )
+
+    st.markdown("### 7. Disturbances and boundary conditions")
+    st.markdown("""
+    The handwritten notes then shift from profile classification
+    to **perturbation propagation** and **boundary conditions**
+    (pp. 28–31).
+
+    The physical principle is that small disturbances can propagate
+    in both directions relative to the channel in **subcritical flow**,
+    but only downstream in **supercritical flow**.
+    """)
+    st.table({
+        "Flow regime": ["Subcritical (Fr < 1)", "Supercritical (Fr > 1)"],
+        "Prescribed depth": ["Downstream boundary", "Upstream boundary"],
+        "Integrate": ["Upstream", "Downstream"]
+    })
+    st.markdown(
+        "The manuscript illustrates these rules with water-surface "
+        "sketches and sign checks for dh/ds. They are the physical "
+        "reason why the Toy rejects a prescribed depth at the "
+        "wrong end of the reach."
+    )
+
+    st.markdown("### 8. Numerical integration of a profile")
+    st.markdown(
+        "To turn the qualitative classification into a computed "
+        "profile, the app uses the **explicit spatial Euler method** "
+        "given in Defina, §8.2.1. This numerical step is taken "
+        "from the Defina reference rather than from the handwritten "
+        "classification sketches."
+    )
+    st.latex(
+        r"\left(\frac{dh}{ds}\right)_i"
+        r"=\left(\frac{i-j}{1-Fr^2}\right)_i"
+    )
+    st.markdown("**Subcritical — integrate upstream:**")
+    st.latex(
+        r"\boxed{h_{i+1}=h_i-"
+        r"\left(\frac{i-j}{1-Fr^2}\right)_i\Delta s}"
+    )
+    st.markdown("**Supercritical — integrate downstream:**")
+    st.latex(
+        r"\boxed{h_{i+1}=h_i+"
+        r"\left(\frac{i-j}{1-Fr^2}\right)_i\Delta s}"
+    )
+    st.markdown(
+        "The numerical step is reduced near critical conditions; "
+        "the app does not force the profile across critical depth. "
+        "The same hydraulic calculations appear in the Toy and "
+        "in the fully worked exercises."
+    )
+
+    st.caption(
+        "Primary source: uploaded handwritten notes, manuscript pages "
+        "20–31 (PDF pages 1–12). The notes' diagrams and sign analysis "
+        "inform the explanations above. Supplementary numerical source: "
+        "Andrea Defina, Profili di moto permanente (2010), §8.2.1."
+    )
 
 with exercise_tab:
     st.header("Exercise · Gradually Varied Flow")
