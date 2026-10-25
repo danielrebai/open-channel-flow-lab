@@ -5,7 +5,7 @@ import streamlit as st
 G = 9.81
 
 st.set_page_config(page_title="Open Channel Flow Lab", page_icon="🌊", layout="wide")
-st.title("🌊 Open Channel Flow Lab")
+st.title("🌊 Open Channel Flow Lab · v5")
 st.caption("Module 01 · Prismatic rectangular channel · Steady gradually varied flow")
 
 with st.sidebar:
@@ -65,6 +65,28 @@ regime = "M (mild slope)" if yn > yc else "S (steep slope)" if yn < yc else "C (
 subcritical = yb > yc
 critical_boundary = abs(yb - yc) < 1e-7
 compatible = (subcritical and side == "Downstream") or ((yb < yc) and side == "Upstream")
+
+# A single prescribed depth is a valid GVF control only downstream for
+# subcritical flow, and upstream for supercritical flow.
+# Do not integrate or render a profile for an invalid control.
+critical_boundary = abs(yb - yc) <= max(1e-5, 0.001 * yc)
+if critical_boundary:
+    st.error(
+        "Invalid boundary condition: the prescribed depth is at (or too close to) "
+        "critical depth (Fr ≈ 1). The GVF equation is singular here. "
+        "Choose a non-critical depth; a critical control needs a separate model."
+    )
+    st.stop()
+
+if not compatible:
+    current = "subcritical (Fr < 1)" if subcritical else "supercritical (Fr > 1)"
+    required = "Downstream" if subcritical else "Upstream"
+    st.error(
+        f"Invalid boundary condition: the prescribed depth gives {current} flow. "
+        f"For this regime, prescribe the depth at the **{required.lower()}** end. "
+        "No water-surface profile has been calculated or displayed."
+    )
+    st.stop()
 
 # Integrate from the prescribed boundary, measuring distance t away from it.
 # Auto-fit stops when the profile has nearly reached normal depth, near
@@ -127,74 +149,63 @@ c1.metric("Normal depth", f"{yn:.3f} m")
 c2.metric("Critical depth", f"{yc:.3f} m")
 c3.metric("Slope type", regime)
 
-if critical_boundary:
-    st.warning("The prescribed depth is critical; the GVF equation is singular at Fr = 1.")
-elif not compatible:
-    st.warning("The boundary condition is on the normally non-controlling side for this flow regime. The integrated profile is a mathematical solution and may not be physically realizable.")
 if warning:
     st.warning(f"Integration stopped: {warning}. Crossing critical depth is not forced.")
 
-# For steep channels, plotting absolute elevations compresses the hydraulic depths.
-# The default bed-relative view removes the large bed drop from the vertical axis.
-st.subheader("Water-surface profile")
+# Always show an inclined bed. For steep channels, apply a clearly labelled
+# vertical exaggeration to the DEVIATION from the straight bed datum.
+# The numerical water-surface profile and hydraulic calculations are unchanged.
+st.subheader("Longitudinal water-surface profile")
 if auto_length:
-    st.caption(f"Automatically selected channel length: **{L:,.1f} m** · {stop_reason or 'Profile computed'}."
-               + (" The profile has not reached its asymptotic depth within the allowed length." if stop_reason == "Maximum channel length reached" else ""))
-view = st.radio(
-    "Vertical reference",
-    ["Depth above channel bed (recommended)", "Absolute elevation"],
-    horizontal=True,
-    help="The bed-relative view makes depth variations visible even for steep slopes.",
+    st.caption(f"Automatically selected channel length: **{L:,.1f} m** · {stop_reason or 'Profile computed'}.")
+
+vertical_exaggeration = st.slider(
+    "Vertical exaggeration of flow depths (visual only)",
+    min_value=1, max_value=30, value=8, step=1,
+    help="Magnifies distances above the sloping bed so the hydraulic profile remains visible. This does not alter the computed depths."
 )
 
 xline = np.linspace(0, L, 300)
 zline = -S0 * xline
-bed_relative = view.startswith("Depth")
+bed_at_profile = -S0 * xs
+
 fig = go.Figure()
-if bed_relative:
-    # Fill below the water surface to make the actual flow depth easy to read.
-    fig.add_trace(go.Scatter(
-        x=xs, y=np.zeros_like(xs), mode="lines", name="Channel bed (reference)",
-        line=dict(color="#64748b", width=2), hoverinfo="skip",
-    ))
-    fig.add_trace(go.Scatter(
-        x=xs, y=ys, mode="lines", name="Water surface",
-        line=dict(color="#0284c7", width=3.5),
-        fill="tonexty", fillcolor="rgba(56, 189, 248, 0.20)",
-        hovertemplate="x = %{x:.1f} m<br>Depth = %{y:.3f} m<extra></extra>",
-    ))
-    fig.add_hline(y=yn, line=dict(color="#16a34a", width=2.5, dash="dash"),
-                  annotation_text=f"Normal depth {yn:.3f} m", annotation_position="top right")
-    fig.add_hline(y=yc, line=dict(color="#dc2626", width=2.5, dash="dot"),
-                  annotation_text=f"Critical depth {yc:.3f} m", annotation_position="bottom right")
-    fig.add_trace(go.Scatter(
-        x=[x0], y=[yb], mode="markers", name="Boundary condition",
-        marker=dict(symbol="circle", size=15, color="white", line=dict(color="#075985", width=3)),
-        hovertemplate=f"Boundary at x = {x0:.1f} m<br>Prescribed depth = {yb:.3f} m<extra></extra>",
-    ))
-    fig.update_yaxes(title_text="Flow depth above bed [m]", rangemode="tozero")
-    st.caption("Bed-relative view: the bed is displayed horizontally at y = 0. The actual bed slope is unchanged in the hydraulic calculation.")
-else:
-    fig.add_trace(go.Scatter(
-        x=xline, y=zline, name="Channel bed", line=dict(color="#64748b", width=3),
-    ))
-    fig.add_trace(go.Scatter(
-        x=xline, y=zline + yn, name="Normal depth", line=dict(color="#16a34a", width=2.5, dash="dash"),
-    ))
-    fig.add_trace(go.Scatter(
-        x=xline, y=zline + yc, name="Critical depth", line=dict(color="#dc2626", width=2.5, dash="dot"),
-    ))
-    fig.add_trace(go.Scatter(
-        x=xs, y=-S0 * xs + ys, name="Water surface",
-        line=dict(color="#0284c7", width=3.5),
-    ))
-    fig.add_trace(go.Scatter(
-        x=[x0], y=[-S0 * x0 + yb], mode="markers", name="Boundary condition",
-        marker=dict(symbol="circle", size=15, color="white", line=dict(color="#075985", width=3)),
-        hovertemplate=f"Boundary at x = {x0:.1f} m<br>Prescribed depth = {yb:.3f} m<extra></extra>",
-    ))
-    fig.update_yaxes(title_text="Relative elevation [m]")
-    st.caption("Absolute-elevation view: the large bed drop on steep slopes can visually compress the flow depths.")
+fig.add_trace(go.Scatter(
+    x=xline, y=zline, name="Channel bed",
+    line=dict(color="#475569", width=3),
+    hovertemplate="x = %{x:.1f} m<br>Bed elevation = %{y:.3f} m<extra></extra>",
+))
+fig.add_trace(go.Scatter(
+    x=xline, y=zline + vertical_exaggeration * yn,
+    name="Uniform flow (normal depth)",
+    line=dict(color="#16a34a", width=2.5, dash="dash"),
+    customdata=np.full_like(xline, yn),
+    hovertemplate="x = %{x:.1f} m<br>Normal depth = %{customdata:.3f} m<extra></extra>",
+))
+fig.add_trace(go.Scatter(
+    x=xline, y=zline + vertical_exaggeration * yc,
+    name="Critical depth", line=dict(color="#dc2626", width=2.5, dash="dot"),
+    customdata=np.full_like(xline, yc),
+    hovertemplate="x = %{x:.1f} m<br>Critical depth = %{customdata:.3f} m<extra></extra>",
+))
+fig.add_trace(go.Scatter(
+    x=xs, y=bed_at_profile + vertical_exaggeration * ys,
+    name="Water surface", line=dict(color="#0284c7", width=3.5),
+    customdata=ys,
+    hovertemplate="x = %{x:.1f} m<br>Flow depth = %{customdata:.3f} m<extra></extra>",
+))
+fig.add_trace(go.Scatter(
+    x=[x0], y=[-S0 * x0 + vertical_exaggeration * yb],
+    mode="markers", name="Boundary condition",
+    marker=dict(symbol="circle", size=15, color="white", line=dict(color="#075985", width=3)),
+    hovertemplate=f"Boundary at x = {x0:.1f} m<br>Prescribed depth = {yb:.3f} m<extra></extra>",
+))
+fig.update_yaxes(title_text="Display elevation [m] (depths vertically exaggerated)")
+st.caption(
+    f"The channel bed is always inclined at S₀ = {S0:.5f}. "
+    f"Water depths are magnified ×{vertical_exaggeration} for display only; "
+    "hover labels report true depths. Display elevations above the bed are not physical elevations when exaggeration > 1."
+)
 
 fig.update_layout(
     height=510,
