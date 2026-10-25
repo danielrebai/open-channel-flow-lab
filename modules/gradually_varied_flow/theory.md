@@ -2,9 +2,7 @@
 
 This chapter follows the handwritten notes in their original sequence: governing equation and specific energy; mild-slope profiles; steep-slope profiles; horizontal and adverse beds; propagation of disturbances; boundary conditions. Each profile is discussed separately. The final numerical section explains how these ideas are implemented in the Toy.
 
-## 1. Governing equation
-
-*Handwritten notes: PDF p. 1 (manuscript p. 20).*
+## 1. Governing equation 
 
 Consider steady flow at constant discharge $Q$ in a prismatic channel. The coordinate $x$ increases downstream. The depth $y=y(x)$ varies sufficiently slowly for the pressure distribution to be approximately hydrostatic. There are no lateral inflows, and the velocity-head coefficient is taken as one, consistently with the Toy. Bed slopes are small enough to neglect the distinction between vertical depth and depth normal to the bed.
 
