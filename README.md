@@ -1,23 +1,32 @@
-# Open Channel Flow Lab — v15
+# Open Channel Flow Lab — v16
 
-## Editing the theory
+## Write all theory in one file
 
-Each chapter lives in `modules/gradually_varied_flow/theory/*.md`.
-Open the file on GitHub, click the pencil icon, edit Markdown and LaTeX (`$...$` or `$$...$$`), and commit.
-The Theory tab uses a chapter selector. No Python editing is needed for text or equations.
+Open **`modules/gradually_varied_flow/theory.md`** on GitHub and click the pencil icon to edit. This is the complete theory for the Gradually Varied Flow module, in one continuous Markdown file with LaTeX equations.
 
-## Editing figures
+To insert or reposition an interactive figure, put one of these markers on its own line:
 
-Plotly figures live in `modules/gradually_varied_flow/figures/plots.py`, with one function per figure. The Theory reader maps them to chapters in `theory.py`.
+```markdown
+<!-- PLOT: energy -->
+<!-- PLOT: signs -->
+<!-- PLOT: profiles -->
+<!-- PLOT: waves -->
+```
 
-## Code organization
+The Streamlit renderer in `modules/gradually_varied_flow/theory.py` replaces each marker with the matching Plotly figure from `figures/plots.py`. You can edit the prose without editing Python.
 
-- `app.py`: navigation only
-- `toy.py`: interactive hydraulic plot
-- `exercise.py`: random exercise generator and worked solutions
-- `hydraulics.py`: shared formulas available for future refactoring
-- `theory.py`: chapter reader
+## Structure
 
-The Toy and Exercise implementations were moved from v14 without intentional numerical changes. The formulas in `hydraulics.py` are a reusable API; migration of all existing calculations to it is deferred to avoid changing results during this structural refactor.
+- `app.py` — navigation (Toy / Theory / Exercise)
+- `modules/gradually_varied_flow/toy.py` — interactive simulator
+- `modules/gradually_varied_flow/theory.md` — **all theory in one file**
+- `modules/gradually_varied_flow/theory.py` — Markdown and figure renderer
+- `modules/gradually_varied_flow/exercise.py` — exercise generator and solutions
+- `modules/gradually_varied_flow/hydraulics.py` — shared hydraulic formulas for future refactoring
+- `modules/gradually_varied_flow/figures/plots.py` — independent figure functions
 
-Deploy with `app.py` as the Streamlit entry point. Upload the **entire folder tree**, not just `app.py`.
+## Deploy
+
+Upload the **entire folder tree** to GitHub, retaining the paths. Delete the obsolete `modules/gradually_varied_flow/theory/` folder from the old v15 repository, so there are no confusing duplicate theory files. Streamlit entry point: `app.py`.
+
+The Toy and Exercise code is unchanged from v15; the Theory now displays in a single scrolling page. This release has been syntax-checked but not deployed to Streamlit Cloud.
