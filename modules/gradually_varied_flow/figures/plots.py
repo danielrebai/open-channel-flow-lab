@@ -155,3 +155,79 @@ def plot_waves():
         "Adapted from the perturbation sketches (handwritten notes, PDF pp. 9–10)."
     )
 
+def plot_specific_energy_denominator():
+    """Specific energy curve showing the sign of dE/dh."""
+
+    # Illustrative rectangular channel
+    Q = 3.0       # m³/s
+    b = 3.0       # m
+    q = Q / b     # m²/s
+
+    hc = (q**2 / G)**(1 / 3)
+    Emin = 1.5 * hc
+
+    def E(h):
+        return h + q**2 / (2 * G * h**2)
+
+    h_super = np.linspace(0.35 * hc, hc, 200)
+    h_sub = np.linspace(hc, 3.0 * hc, 200)
+
+    fig = go.Figure()
+
+    # Supercritical branch: negative derivative
+    fig.add_trace(go.Scatter(
+        x=h_super,
+        y=E(h_super),
+        mode="lines",
+        name="Supercritical: dE/dh < 0",
+        line=dict(color="#dc2626", width=3)
+    ))
+
+    # Subcritical branch: positive derivative
+    fig.add_trace(go.Scatter(
+        x=h_sub,
+        y=E(h_sub),
+        mode="lines",
+        name="Subcritical: dE/dh > 0",
+        line=dict(color="#2563eb", width=3)
+    ))
+
+    # Critical point
+    fig.add_trace(go.Scatter(
+        x=[hc],
+        y=[Emin],
+        mode="markers",
+        name="Critical: dE/dh = 0",
+        marker=dict(color="#111827", size=11)
+    ))
+
+    fig.add_vline(
+        x=hc,
+        line_dash="dot",
+        line_color="#64748b"
+    )
+
+    fig.add_annotation(
+        x=hc,
+        y=Emin,
+        text="Critical depth",
+        showarrow=True,
+        arrowhead=2,
+        ax=65,
+        ay=-35
+    )
+
+    fig.update_layout(
+        title="Specific energy: sign of the denominator",
+        xaxis_title="Water depth h [m]",
+        yaxis_title="Specific energy E [m]",
+        height=440,
+        legend=dict(
+            orientation="h",
+            y=-0.25,
+            x=0
+        ),
+        margin=dict(t=60, b=100, l=55, r=25)
+    )
+
+    st.plotly_chart(fig, width="stretch")

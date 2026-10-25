@@ -1,0 +1,12 @@
+MODULE 02 — SPECIFIC ENERGY
+
+1. Copy the folder modules/specific_energy into the existing repository's modules/ directory.
+2. Keep the existing Module 01 files unchanged.
+3. In app.py, import the new modules:
+   from modules.specific_energy import toy as energy_toy
+   from modules.specific_energy import theory as energy_theory
+   from modules.specific_energy import exercise as energy_exercise
+4. Add a module selector to app.py, or add a second set of tabs calling:
+   energy_toy.render(), energy_theory.render(), energy_exercise.render().
+
+Example replacement app.py is intentionally NOT included to avoid overwriting your working app.

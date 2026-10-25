@@ -1,56 +1,22 @@
-# Gradually varied flow
+# Gradually Varied Flow
 
-This chapter follows the handwritten notes in their original sequence: governing equation and specific energy; mild-slope profiles; steep-slope profiles; horizontal and adverse beds; propagation of disturbances; boundary conditions. Each profile is discussed separately. The final numerical section explains how these ideas are implemented in the Toy.
+In this chapter, the gradually varied flow profiles are derived.
 
-## 1. Governing equation 
+## 1. Governing Equation
 
-Consider steady flow at constant discharge $Q$ in a prismatic channel. The coordinate $x$ increases downstream. The depth $y=y(x)$ varies sufficiently slowly for the pressure distribution to be approximately hydrostatic. There are no lateral inflows, and the velocity-head coefficient is taken as one, consistently with the Toy. Bed slopes are small enough to neglect the distinction between vertical depth and depth normal to the bed.
+Consider steady flow at constant discharge $Q$ in a prismatic channel. The coordinate $x$ increases downstream. The flow depth $y=y(x)$ varies sufficiently slowly for the pressure distribution to be approximately hydrostatic. There are no lateral inflows, and the velocity-head coefficient is taken as unity, consistently with the Toy. Bed slopes are sufficiently small to neglect the distinction between vertical depth and depth measured normal to the channel bed.
 
-### Notation
-
-| Symbol | Meaning | Unit |
-|---|---|---|
-| $x$ | Downstream coordinate | m |
-| $z_b$ | Bed elevation | m |
-| $y$ | Flow depth | m |
-| $y_n$ | Normal depth | m |
-| $y_c$ | Critical depth | m |
-| $Q$ | Discharge | m³/s |
-| $b$ | Rectangular-channel width | m |
-| $U=Q/A$ | Mean velocity | m/s |
-| $S_0=-dz_b/dx$ | Bed slope, positive for a bed falling downstream | m/m |
-| $S_f=-dH/dx$ | Energy-loss slope, positive in the flow direction | m/m |
-| $n$ | Manning roughness coefficient | s/m$^{1/3}$ |
-| $Fr$ | Froude number | dimensionless |
-
-The handwritten symbols for depth, critical depth, normal depth and streamwise coordinate are replaced throughout by $y$, $y_c$, $y_n$ and $x$, matching the Toy. Bed and energy-loss slopes are denoted by $S_0$ and $S_f$.
-
-### From total head to the depth equation
-
-For a rectangular channel,
-
-$$
-A=by,\qquad U=\frac{Q}{by},\qquad
-E(y)=y+\frac{U^2}{2g}=y+\frac{Q^2}{2gb^2y^2}.
-$$
-
-Here $E$ is the specific energy measured above the local bed. Total head is
-
-$$
-H=z_b+E.
-$$
-
-The steady energy equation and the definition of bed slope give
+The mechanical energy equation for steady, gradually varied flow reads as follows:
 
 $$
 \frac{dH}{dx}=-S_f,
-\qquad \frac{dz_b}{dx}=-S_0,
-\qquad \boxed{\frac{dE}{dx}=S_0-S_f}.
+\qquad
+\frac{dz_b}{dx}=-S_0,
+\qquad
+\boxed{\frac{dE}{dx}=S_0-S_f}.
 $$
 
-Specific energy can therefore increase downstream even while total head decreases: the bed is falling and gravitational potential energy is being converted into specific energy.
-
-Since discharge and channel geometry are fixed,
+Since the specific energy $E$ depends on the flow depth $y$ for a given discharge, applying the chain rule yields:
 
 $$
 \frac{dE}{dx}=\frac{dE}{dy}\frac{dy}{dx},
@@ -58,429 +24,636 @@ $$
 \boxed{\frac{dy}{dx}=\frac{S_0-S_f}{dE/dy}}.
 $$
 
-Differentiating $E(y)$ yields
+This is a first-order ordinary differential equation governing the water-surface profile, which can be solved numerically subject to an appropriate boundary condition.
+
+To understand the qualitative behavior of the solutions to this ODE, we need to examine the signs of its numerator and denominator. Together, they determine the sign of the water-depth gradient along the streamwise direction and, consequently, whether the water-surface profile increases or decreases downstream.
+
+### The Numerator: Bed Slope and Friction Slope
+
+The numerator of the gradually varied flow equation is given by $S_0-S_f$, where $S_0$ is the bed slope and $S_f$ is the friction slope.
+
+For a rectangular channel, the friction slope can be evaluated using Manning's equation:
 
 $$
-\frac{dE}{dy}=1-\frac{Q^2}{gb^2y^3}=1-Fr^2,
-\qquad Fr^2=\frac{U^2}{gy}=\frac{Q^2}{gb^2y^3}.
+S_f(y)=\left(\frac{nQ}{A(y)R(y)^{2/3}}\right)^2,
 $$
 
-Thus the governing equation used in the Toy is
+where $A=by$ is the flow area and $R=A/(b+2y)$ is the hydraulic radius.
+
+For a given discharge and channel geometry, the friction slope decreases as the flow depth increases, whereas the bed slope remains constant.
+
+The **normal depth** $y_0$ is defined by the condition
 
 $$
-\boxed{\frac{dy}{dx}=\frac{S_0-S_f(y)}{1-Fr^2(y)}}.
+S_f(y_0)=S_0.
 $$
 
-The numerator compares bed slope with energy dissipation; the denominator identifies the local flow regime. Their signs determine whether depth increases or decreases downstream.
+At this depth, the numerator vanishes, corresponding to uniform flow when the denominator is nonzero.
 
-### Resistance law outside uniform flow
+[[numerator]]
 
-The notes use a resistance relation to express losses as a function of depth. The Toy uses Manning's law, evaluated locally:
+Three cases can therefore be distinguished:
+
+- For $y<y_0$, the friction slope exceeds the bed slope ($S_f>S_0$), and the numerator is **negative**: $S_0-S_f<0$.
+- For $y=y_0$, the two slopes are equal ($S_f=S_0$), and the numerator is **zero**: $S_0-S_f=0$.
+- For $y>y_0$, the friction slope is smaller than the bed slope ($S_f<S_0$), and the numerator is **positive**: $S_0-S_f>0$.
+
+Therefore, the normal depth separates the regions of positive and negative numerator. Combining this result with the sign of the denominator allows us to determine whether the flow depth increases or decreases in the downstream direction.
+
+### The Denominator: Specific Energy
+
+To determine the sign of the denominator, we examine how the specific energy varies with flow depth. For a rectangular channel, assuming a constant discharge $Q$, the specific energy is
 
 $$
-P=b+2y,\qquad R=\frac{A}{P}=\frac{by}{b+2y},
+\begin{aligned}
+E &= y+\frac{Q^2}{2gb^2y^2} \\
+  &= y+\frac{q^2}{2gy^2},
+\end{aligned}
+$$
+
+where $q=Q/b$ is the discharge per unit width.
+
+[[SPECIFIC_ENERGY_PLOT]]
+
+Differentiating with respect to $y$ gives
+
+$$
+\begin{aligned}
+\frac{dE}{dy} &= 1-\frac{q^2}{gy^3} \\
+              &= \boxed{1-\mathrm{Fr}^2},
+\end{aligned}
+$$
+
+where $\mathrm{Fr}$ is the Froude number.
+
+The specific-energy curve reaches its minimum at the **critical depth** $y_c$, where $\mathrm{Fr}=1$ and $dE/dy=0$.
+
+For **supercritical flow** ($y<y_c$, $\mathrm{Fr}>1$), the derivative $dE/dy$ is negative: specific energy decreases as flow depth increases.
+
+For **critical flow** ($y=y_c$, $\mathrm{Fr}=1$), the specific energy reaches its minimum and $dE/dy=0$. Consequently, the denominator of the gradually varied flow equation vanishes. If $S_0-S_f\neq 0$, the water-depth gradient $dy/dx$ becomes unbounded as the critical depth is approached, and the differential equation is singular at this point.
+
+For **subcritical flow** ($y>y_c$, $\mathrm{Fr}<1$), the derivative $dE/dy$ is positive: specific energy increases as flow depth increases.
+
+Thus, the sign of the denominator in the gradually varied flow equation is determined entirely by the flow regime, while the critical depth separates the two branches of the specific-energy curve.
+
+## M Profiles — Mild Slope
+
+For a **mild slope**, the normal depth is larger than the critical depth:
+
+$$
+\boxed{y_0>y_c},\qquad S_0>0.
+$$
+
+Using the downstream coordinate $x$ and the flow depth $y$, the gradually varied flow (GVF) equation is
+
+$$
+\boxed{\frac{dy}{dx}=\frac{S_0-S_f(y)}{dE/dy}
+=\frac{S_0-S_f(y)}{1-\mathrm{Fr}^2}},
+$$
+
+For the mild-slope classification, the relevant reference depths are the **normal depth** $y_0$, at which $S_f(y_0)=S_0$, and the **critical depth** $y_c$, at which $dE/dy=1-\mathrm{Fr}^2=0$.
+
+For a rectangular channel with constant width $b$ and discharge $Q$,
+
+$$
+A=by,\qquad U=\frac{Q}{by},\qquad
+\mathrm{Fr}^2=\frac{U^2}{gy}=\frac{Q^2}{gb^2y^3},
+$$
+
+so the mean velocity changes with depth according to
+
+$$
+\frac{dU}{dx}=-\frac{Q}{by^2}\frac{dy}{dx}
+=-\frac{U}{y}\frac{dy}{dx}.
+$$
+
+Therefore, **increasing depth implies decreasing velocity**, and **decreasing depth implies increasing velocity**. In the profile plots, the water surface is blue and the channel bed is brown; the **normal-depth reference is green** and the **critical-depth reference is red**.
+
+### M1 Profile — $y>y_0>y_c$
+
+**1. Sign of the depth gradient**
+
+Because $y>y_0$, the friction slope is smaller than the bed slope. Because $y>y_c$, the flow is subcritical:
+
+$$
+\underbrace{S_0-S_f(y)}_{>0},\qquad
+\underbrace{\frac{dE}{dy}=1-\mathrm{Fr}^2}_{>0}
+\quad\Longrightarrow\quad
+\boxed{\frac{dy}{dx}=\frac{+}{+}>0}.
+$$
+
+The depth **increases downstream**, while
+
+$$
+\frac{dU}{dx}=-\frac{U}{y}\frac{dy}{dx}<0.
+$$
+
+Thus M1 represents a **decelerating subcritical flow** in a mild-slope channel.
+
+**2. Upstream limit: approach to normal depth**
+
+As $y\to y_0^+$, friction approaches the bed slope, whereas the specific-energy derivative remains positive:
+
+$$
+S_f(y)\to S_0,\qquad
+1-\mathrm{Fr}^2(y_0)>0,
+$$
+
+$$
+\boxed{\frac{dy}{dx}\to0^+}.
+$$
+
+The profile approaches the **normal-depth line asymptotically** in the upstream direction. In the autonomous GVF equation this corresponds to $x\to-\infty$; normal depth is not reached at a finite position along a nonuniform M1 solution.
+
+**3. Downstream limit: horizontal water-surface asymptote**
+
+For a very large depth, the wetted area increases and the friction slope decreases. In particular, for fixed $Q$ and $b$,
+
+$$
+\lim_{y\to\infty}S_f(y)=0,\qquad
+\lim_{y\to\infty}\mathrm{Fr}^2=0,
+$$
+
+hence
+
+$$
+\boxed{\lim_{y\to\infty}\frac{dy}{dx}
+=\frac{S_0-0}{1-0}=S_0}.
+$$
+
+The bed elevation $z_b$ satisfies $dz_b/dx=-S_0$. Since the free-surface elevation is $z_w=z_b+y$,
+
+$$
+\frac{dz_w}{dx}=\frac{dz_b}{dx}+\frac{dy}{dx}
+=-S_0+\frac{dy}{dx}
+\longrightarrow -S_0+S_0=0.
+$$
+
+**Physical interpretation:** far downstream, the depth grows at almost exactly the rate at which the bed falls. Consequently, the **water surface becomes horizontal** even though the flow depth continues to increase. The free-surface slope therefore tends to zero, yielding a horizontal asymptote.
+
+[[m1]]
+
+### M2 Profile — $y_c<y<y_0$
+
+**1. Sign of the depth gradient**
+
+Here $y<y_0$, so friction exceeds the bed slope; however, $y>y_c$, so the flow remains subcritical:
+
+$$
+\underbrace{S_0-S_f(y)}_{<0},\qquad
+\underbrace{\frac{dE}{dy}=1-\mathrm{Fr}^2}_{>0}
+\quad\Longrightarrow\quad
+\boxed{\frac{dy}{dx}=\frac{-}{+}<0}.
+$$
+
+The depth **decreases downstream**, and therefore
+
+$$
+\frac{dU}{dx}=-\frac{U}{y}\frac{dy}{dx}>0.
+$$
+
+Thus M2 is an **accelerating subcritical flow** in a mild-slope channel.
+
+**2. Upstream limit: normal-depth asymptote**
+
+As $y\to y_0^-$,
+
+$$
+S_0-S_f(y)\to0^-,\qquad
+1-\mathrm{Fr}^2(y_0)>0,
+$$
+
+$$
+\boxed{\frac{dy}{dx}\to0^-}.
+$$
+
+The M2 profile approaches the **normal-depth line asymptotically upstream** ($x\to-\infty$ in the mathematical solution).
+
+**3. Downstream limit: vertical tangent at critical depth**
+
+As $y\to y_c^+$, the specific-energy derivative tends to zero from above, while the numerator remains negative because $y_c<y_0$:
+
+$$
+1-\mathrm{Fr}^2\to0^+,\qquad
+S_0-S_f(y_c)<0.
+$$
+
+Consequently,
+
+$$
+\boxed{\frac{dy}{dx}\to-\infty}.
+$$
+
+Equivalently, $dx/dy\to0^-$: the curve $y(x)$ develops a **vertical tangent** as it approaches critical depth. This occurs at a finite downstream location for the idealized M2 solution, not necessarily at $x\to+\infty$. The standard GVF equation becomes singular there; the critical point is not crossed smoothly by this equation when its numerator is nonzero.
+
+[[m2]]
+
+### M3 Profile — $0<y<y_c<y_0$
+
+**1. Sign of the depth gradient**
+
+Both numerator and denominator are negative: $y<y_0$ gives $S_f>S_0$, and $y<y_c$ gives $\mathrm{Fr}>1$.
+
+$$
+\underbrace{S_0-S_f(y)}_{<0},\qquad
+\underbrace{\frac{dE}{dy}=1-\mathrm{Fr}^2}_{<0}
+\quad\Longrightarrow\quad
+\boxed{\frac{dy}{dx}=\frac{-}{-}>0}.
+$$
+
+Therefore,
+
+$$
+\frac{dy}{dx}>0,\qquad
+\frac{dU}{dx}=-\frac{U}{y}\frac{dy}{dx}<0.
+$$
+
+M3 represents a **decelerating supercritical flow** in a mild-slope channel: depth increases and velocity decreases downstream.
+
+**2. Downstream limit: vertical tangent at critical depth**
+
+When $y\to y_c^-$, the denominator tends to zero from below, while the numerator remains negative:
+
+$$
+1-\mathrm{Fr}^2\to0^-,\qquad
+S_0-S_f(y_c)<0,
+$$
+
+$$
+\boxed{\frac{dy}{dx}\to+\infty}.
+$$
+
+Thus the M3 profile reaches a **vertical tangent** as it approaches critical depth from below. As for M2, the critical point is singular for the standard GVF equation and requires separate physical analysis.
+
+**3. Formal shallow-depth limit and physical limitation**
+
+Extrapolating the M3 profile toward vanishing depth has **no physical meaning all the way to $y=0$**. For a rectangular channel at constant discharge,
+
+$$
+U=\frac{Q}{by}
+\quad\Longrightarrow\quad
+\boxed{\lim_{y\to0^+}U=+\infty}.
+$$
+
+Such unbounded velocity is not physically realizable; moreover, the assumptions of gradually varied flow and the resistance model cease to be reliable at sufficiently small depths. The mathematical curve must therefore **not** be interpreted as an actual flow profile down to zero depth.
+
+For completeness, Manning's relation also shows why the friction slope becomes large at small depth:
+
+$$
+A=by,\qquad R=\frac{by}{b+2y}\sim y,
+\qquad S_f(y)=\left(\frac{nQ}{AR^{2/3}}\right)^2
+\sim\frac{n^2Q^2}{b^2y^{10/3}}
+\quad(y\to0^+).
+$$
+
+This asymptotic result characterizes the idealized resistance model, but does not make the zero-depth limit physically valid.
+
+[[m3]]
+
+## S Profiles — Steep Slope
+
+### General Characteristics of S Profiles
+
+A **steep-slope channel** is characterized by a normal depth smaller than the critical depth:
+
+$$
+\boxed{y_0<y_c}.
+$$
+
+Uniform flow is therefore supercritical, since $\mathrm{Fr}(y_0)>1$. For steady flow at constant discharge in a prismatic rectangular channel, the governing equation is
+
+$$
+\boxed{\frac{dy}{dx}=\frac{S_0-S_f(y)}{1-\mathrm{Fr}^2(y)}}.
+$$
+
+The numerator vanishes at $y=y_0$, where $S_f=S_0$, and the denominator vanishes at $y=y_c$, where $\mathrm{Fr}=1$. Because $y_0<y_c$, these depths divide the admissible positive depths into three regions:
+
+- **S1:** $y>y_c>y_0$ — subcritical, decelerating flow.
+- **S2:** $y_0<y<y_c$ — supercritical, accelerating flow.
+- **S3:** $0<y<y_0<y_c$ — supercritical, decelerating flow.
+
+Here $x$ increases downstream, $y$ is the flow depth, and $U=Q/(by)$ is the mean velocity. For a constant rectangular width $b$,
+
+$$
+\frac{dU}{dx}=-\frac{U}{y}\frac{dy}{dx}.
+$$
+
+Thus an increasing depth implies decreasing velocity, and vice versa. In the profile plots, **critical depth is red** and **normal depth is green**.
+
+### S1 Profile — $y>y_c>y_0$
+
+**1. Sign of the depth gradient and flow regime**
+
+Since $y>y_0$, the friction slope is smaller than the bed slope; since $y>y_c$, the flow is subcritical:
+
+$$
+S_0-S_f(y)>0,\qquad
+\frac{dE}{dy}=1-\mathrm{Fr}^2>0.
+$$
+
+Consequently,
+
+$$
+\boxed{\frac{dy}{dx}=\frac{+}{+}>0},
 \qquad
-\boxed{S_f(y)=\left(\frac{nQ}{A(y)R(y)^{2/3}}\right)^2}.
+\frac{dU}{dx}=-\frac{U}{y}\frac{dy}{dx}<0.
 $$
 
-Applying a uniform-flow resistance law locally is a modelling assumption of gradually varied flow; it does not require the actual flow to be uniform. For fixed $Q,b,n$, $S_f$ decreases as $y$ increases.
+The S1 profile describes **decelerating subcritical flow**: depth increases and mean velocity decreases downstream in a steep-slope channel.
 
-## 2. Specific energy, characteristic depths and limiting behaviour
+**2. Upstream limit: vertical tangent at critical depth**
 
-*Handwritten notes: PDF pp. 1–2 (manuscript pp. 20–21).*
-
-### Critical depth
-
-At fixed discharge, specific energy has a minimum where
+As $y\to y_c^+$, the denominator tends to zero from above. Because $y_c>y_0$, the numerator remains strictly positive:
 
 $$
-\frac{dE}{dy}=0,\qquad Fr=1.
+1-\mathrm{Fr}^2\to0^+,
+\qquad S_0-S_f(y_c)>0.
 $$
 
-For a rectangular channel,
+Therefore,
 
 $$
-\boxed{y_c=\left(\frac{Q^2}{gb^2}\right)^{1/3}},
-\qquad E_{\min}=\frac32 y_c.
+\boxed{\frac{dy}{dx}\to+\infty},
+\qquad \frac{dx}{dy}\to0^+.
 $$
 
-For $y>y_c$, $Fr<1$ and $dE/dy>0$: the flow is subcritical. For $0<y<y_c$, $Fr>1$ and $dE/dy<0$: the flow is supercritical. An energy value above the minimum admits two alternate depths, one on each branch. Alternate depths are not the conjugate depths of a hydraulic jump, which are related by momentum balance.
+The S1 curve has a **vertical tangent in the depth-versus-distance diagram** at its critical-depth endpoint. This endpoint occurs at a finite longitudinal coordinate in the idealized GVF solution; it is not an asymptote at $x\to-\infty$. The standard GVF equation is singular at critical depth when its numerator is nonzero.
 
-<!-- PLOT: energy -->
+**3. Large-depth limit: horizontal water-surface asymptote**
 
-### Normal depth
-
-For a positive bed slope, normal depth is the uniform-flow equilibrium:
+As $y\to\infty$, the cross-sectional area and hydraulic radius increase, so Manning's friction slope tends to zero. The mean velocity and Froude number also tend to zero:
 
 $$
-\boxed{S_f(y_n)=S_0}.
+S_f(y)\to0,\qquad
+U=\frac{Q}{by}\to0,\qquad
+\mathrm{Fr}^2=\frac{Q^2}{gb^2y^3}\to0.
 $$
 
-Equivalently,
+Hence
 
 $$
-Q=\frac{1}{n}A(y_n)R(y_n)^{2/3}\sqrt{S_0}.
+\boxed{\frac{dy}{dx}\to S_0}.
 $$
 
-Unlike $y_c$, $y_n$ depends on roughness and bed slope. Because $S_f$ decreases with depth,
+The water-surface elevation is $z_w=z_b+y$. Since $dz_b/dx=-S_0$,
 
 $$
-y<y_n\Rightarrow S_f>S_0,
-\qquad y>y_n\Rightarrow S_f<S_0.
+\frac{dz_w}{dx}=-S_0+\frac{dy}{dx}\to0.
 $$
 
-### Two different limits
+Thus the **water surface becomes asymptotically horizontal**, even though the depth continues to increase as the bed descends. The large-depth limit is a mathematical extrapolation of the profile.
 
-If $y_n\ne y_c$, the denominator remains nonzero at normal depth, so
+[[s1]]
 
-$$
-y\to y_n\quad\Rightarrow\quad \frac{dy}{dx}\to0.
-$$
+### S2 Profile — $y_0<y<y_c$
 
-A nonuniform profile approaches the uniform-flow line asymptotically; it does not reach and cross it at a finite distance in the smooth autonomous model. If the prescribed depth is exactly $y_n$, the solution is uniform throughout.
+**1. Sign of the depth gradient and flow regime**
 
-At critical depth, if $S_0-S_f(y_c)\ne0$, the denominator vanishes and the formal magnitude of $dy/dx$ becomes unbounded. This is the vertical tangent in the sketches. It indicates loss of validity of the gradually varied approximation, rather than a physically vertical water surface predicted reliably by this model. Such a critical limit can occur at a finite streamwise position $x_c$.
-
-When $y_n=y_c$, numerator and denominator vanish together. This critical-slope case requires a separate limiting analysis; the statements about a nonzero numerator at critical depth do not apply to it.
-
-<!-- PLOT: signs -->
-
-### Reading a longitudinal sketch
-
-Depth and water-surface elevation are different quantities:
+For depths above normal depth, $S_f<S_0$, whereas depths below critical depth correspond to supercritical flow:
 
 $$
-z_w=z_b+y,\qquad \frac{dz_w}{dx}=-S_0+\frac{dy}{dx}.
+S_0-S_f(y)>0,\qquad
+1-\mathrm{Fr}^2<0.
 $$
 
-A positive depth gradient does not by itself imply an upward-sloping water surface. As $y\to\infty$, $S_f\to0$ and $Fr\to0$, so $dy/dx\to S_0$ and $dz_w/dx\to0$. This is the horizontal limiting direction shown for the deep M1 and S1 profiles.
-
-At constant discharge,
+Therefore,
 
 $$
-\frac{dU}{dx}=-\frac{Q}{by^2}\frac{dy}{dx}.
-$$
-
-An increasing depth therefore means decreasing velocity; a decreasing depth means increasing velocity.
-
-## 3. Mild-slope channel
-
-*Handwritten notes: PDF pp. 3–4 (manuscript pp. 22–23).*
-
-A positive slope is mild for the specified discharge, geometry and roughness when
-
-$$
-\boxed{y_n>y_c}.
-$$
-
-The normal-depth line lies above the critical-depth line. The three intervals must be examined separately.
-
-### 3.1 M1 profile: $y>y_n>y_c$
-
-**Sign analysis.** Since depth exceeds normal depth, friction losses are smaller than bed slope. Since depth also exceeds critical depth, the flow is subcritical:
-
-$$
-S_0-S_f>0,\qquad 1-Fr^2>0,
-\qquad \boxed{\frac{dy}{dx}>0}.
-$$
-
-**Physical behaviour.** Depth increases and velocity decreases downstream. M1 is a decelerating subcritical backwater profile. A raised downstream water level, such as a reservoir or downstream obstruction, can produce this behaviour when the upstream reach remains on the subcritical branch.
-
-**Limits.** Following the profile upstream, $y\to y_n$ asymptotically. Following its mathematical continuation downstream, depth grows; for very large depth, $dy/dx\to S_0$ and the free surface tends towards a horizontal direction. This deep limit describes the trend of the idealized solution; it does not require every real channel to extend to infinite depth.
-
-**Control.** Prescribe a downstream depth $y_b>y_n$ and integrate upstream. The downstream disturbance produces a backwater influence extending upstream towards uniform flow.
-
-### 3.2 M2 profile: $y_c<y<y_n$
-
-**Sign analysis.** Depth below $y_n$ gives friction losses larger than bed slope, while depth above $y_c$ gives subcritical flow:
-
-$$
-S_0-S_f<0,\qquad 1-Fr^2>0,
-\qquad \boxed{\frac{dy}{dx}<0}.
-$$
-
-**Physical behaviour.** Depth decreases and velocity increases downstream. M2 is an accelerating subcritical drawdown profile. It can occur upstream of a control that lowers the downstream depth, such as a transition towards a critical control.
-
-**Limits.** Upstream, the profile approaches $y_n$ asymptotically from below. Downstream, it approaches $y_c$ from above with a formally unbounded negative depth gradient. The critical endpoint is generally at a finite $x_c$, where a local control or rapidly varied-flow description is required.
-
-**Control.** Prescribe a downstream depth $y_c<y_b<y_n$ and integrate upstream. A downstream critical control may select the overall drawdown, but the ordinary Toy solver must start at a noncritical depth rather than directly at $Fr=1$.
-
-### 3.3 M3 profile: $0<y<y_c<y_n$
-
-**Sign analysis.** Both numerator and denominator are negative:
-
-$$
-S_0-S_f<0,\qquad 1-Fr^2<0,
-\qquad \boxed{\frac{dy}{dx}>0}.
-$$
-
-**Physical behaviour.** Depth increases and velocity decreases downstream, while the flow remains supercritical. A shallow jet entering a mild reach, for example downstream of a sluice gate, may generate an M3 profile.
-
-**Limits.** Downstream, the smooth branch tends towards $y_c$ from below with a formally unbounded positive gradient. It cannot be continued through critical depth by simply using the same GVF equation. A hydraulic jump may connect the supercritical reach to a subcritical reach before this formal endpoint; its location requires an additional matching condition.
-
-Tracing the branch upstream reduces depth. At fixed nonzero $Q$, the limit $y\to0$ implies $U=Q/(by)\to\infty$. This is an inadmissible limiting extrapolation for the present model, not evidence that water becomes compressible at an ordinary shallow depth. Other assumptions, including hydrostatic pressure and the local resistance approximation, cease to be reliable near such extremes.
-
-**Control.** Prescribe an upstream depth $0<y_b<y_c$ and integrate downstream. Normal depth lies on a different flow branch, so M3 cannot approach $y_n$ smoothly without a transition.
-
-## 4. Steep-slope channel
-
-*Handwritten notes: PDF pp. 5–6 (manuscript pp. 24–25).*
-
-A positive slope is steep for the specified hydraulic parameters when
-
-$$
-\boxed{y_n<y_c}.
-$$
-
-The normal-depth line now lies below the critical-depth line. A steep bed does not imply that every possible flow on it is supercritical.
-
-### 4.1 S1 profile: $y>y_c>y_n$
-
-**Sign analysis.** Depth exceeds both characteristic depths:
-
-$$
-S_0-S_f>0,\qquad 1-Fr^2>0,
-\qquad \boxed{\frac{dy}{dx}>0}.
-$$
-
-**Physical behaviour.** Depth increases and velocity decreases downstream. S1 is a decelerating subcritical profile on a steep bed. A sufficiently high downstream water level can sustain a subcritical reach, potentially downstream of a hydraulic jump.
-
-**Limits.** Upstream, the branch approaches $y_c$ from above, with a formal positive vertical tangent at its critical endpoint. It cannot approach $y_n$ on this branch, because normal depth is below critical depth. Downstream, the deep-water limit gives $dy/dx\to S_0$ and an approximately horizontal free surface.
-
-**Control.** Prescribe a downstream depth $y_b>y_c$ and integrate upstream. If an upstream supercritical reach is also present, its connection to S1 requires a separate hydraulic-jump calculation.
-
-### 4.2 S2 profile: $y_n<y<y_c$
-
-**Sign analysis.** Depth exceeds normal depth but remains below critical depth:
-
-$$
-S_0-S_f>0,\qquad 1-Fr^2<0,
-\qquad \boxed{\frac{dy}{dx}<0}.
-$$
-
-**Physical behaviour.** Depth decreases and velocity increases downstream. S2 is an accelerating supercritical profile. It commonly describes the adjustment from a near-critical entrance towards the supercritical normal flow of a steep reach.
-
-**Limits.** Upstream, the branch approaches $y_c$ from below with a formal negative vertical tangent. Downstream, it approaches $y_n$ asymptotically from above. Unlike M2, S2 approaches normal depth in the downstream direction.
-
-**Control.** Prescribe an upstream depth $y_n<y_b<y_c$ and integrate downstream. A critical entrance needs a separate treatment before starting the noncritical GVF computation.
-
-### 4.3 S3 profile: $0<y<y_n<y_c$
-
-**Sign analysis.** Depth lies below both characteristic depths:
-
-$$
-S_0-S_f<0,\qquad 1-Fr^2<0,
-\qquad \boxed{\frac{dy}{dx}>0}.
-$$
-
-**Physical behaviour.** Depth increases and velocity decreases downstream. S3 is a decelerating supercritical profile, possible when a shallow upstream jet enters a steep channel below its normal depth.
-
-**Limits.** Downstream, the branch approaches $y_n$ asymptotically from below, remaining supercritical. Upstream continuation reduces depth; extrapolation to zero depth would imply unbounded velocity and lies outside the useful physical range of this model. S3 does not reach $y_c$ along its downstream adjustment, since $y_n$ is encountered as an asymptote first.
-
-**Control.** Prescribe an upstream depth $0<y_b<y_n$ and integrate downstream.
-
-### Comparison of the six positive-slope profiles
-
-The following existing plot collects the six qualitative profiles. Use each panel together with its corresponding discussion above. These sketches illustrate the classification; they are not a numerical integration for the selected Toy parameters.
-
-<!-- PLOT: profiles -->
-
-| Profile | Depth interval | $S_0-S_f$ | $1-Fr^2$ | $dy/dx$ | Downstream velocity trend | Depth control |
-|---|---|---|---|---|---|---|
-| M1 | $y>y_n>y_c$ | + | + | + | Decreasing | Downstream |
-| M2 | $y_c<y<y_n$ | − | + | − | Increasing | Downstream |
-| M3 | $0<y<y_c<y_n$ | − | − | + | Decreasing | Upstream |
-| S1 | $y>y_c>y_n$ | + | + | + | Decreasing | Downstream |
-| S2 | $y_n<y<y_c$ | + | − | − | Increasing | Upstream |
-| S3 | $0<y<y_n<y_c$ | − | − | + | Decreasing | Upstream |
-
-## 5. Horizontal channel
-
-*Handwritten notes: PDF p. 7 (manuscript p. 26).*
-
-For a horizontal bed,
-
-$$
-S_0=0,\qquad \frac{dy}{dx}=\frac{-S_f}{1-Fr^2}.
-$$
-
-With nonzero discharge and positive roughness, $S_f>0$ at every finite depth. There is no finite normal depth satisfying $S_f=S_0=0$. The notation $y_n\to\infty$ is a formal limit as a positive slope tends to zero, not a finite uniform-flow state. There is no H1 interval.
-
-### 5.1 H2 profile: $y>y_c$
-
-**Signs and behaviour.** The numerator is negative and the denominator positive, so $dy/dx<0$. Depth decreases and velocity increases downstream: H2 is accelerating subcritical flow.
-
-**Limits.** Downstream, the branch approaches critical depth with a formal negative vertical tangent at a finite endpoint. Upstream, depth increases, with $dy/dx\to0^-$ in the deep limit. No finite normal-depth line is approached.
-
-**Control.** A downstream depth selects the subcritical profile; integrate upstream.
-
-### 5.2 H3 profile: $0<y<y_c$
-
-**Signs and behaviour.** Numerator and denominator are both negative, so $dy/dx>0$. Depth increases and velocity decreases downstream: H3 is decelerating supercritical flow.
-
-**Limits.** Downstream, the branch approaches critical depth from below, where the gradually varied description fails. Upstream extrapolation tends towards smaller depths and eventually leaves the model's useful range.
-
-**Control.** Prescribe an upstream depth and integrate downstream. The Toy currently restricts bed slope to positive values, so H2 and H3 are theoretical extensions rather than selectable Toy cases.
-
-## 6. Adverse bed slope
-
-*PDF p. 8 (manuscript p. 27) contains the heading only. The discussion below is an extension derived from the governing equation.*
-
-For a bed rising downstream,
-
-$$
-S_0<0,\qquad S_0-S_f<0.
-$$
-
-There is no normal depth for positive discharge and positive energy losses: $S_f(y_n)=S_0$ cannot hold. Only the intervals above and below critical depth remain.
-
-### 6.1 A2 profile: $y>y_c$
-
-The numerator is negative and the denominator positive, so $dy/dx<0$. Depth decreases and velocity increases downstream, while flow stays subcritical. Its downstream critical limit requires a separate local treatment. The depth condition belongs downstream and integration proceeds upstream.
-
-### 6.2 A3 profile: $0<y<y_c$
-
-Both numerator and denominator are negative, so $dy/dx>0$. Depth increases and velocity decreases downstream, while flow stays supercritical. Its formal downstream limit is critical depth from below; a jump or other transition may intervene. The depth condition belongs upstream and integration proceeds downstream.
-
-Adverse-slope cases are not available in the current Toy. They obey the same sign analysis but have no normal-depth asymptote.
-
-## 7. Disturbances and propagation of information
-
-*Handwritten notes: PDF p. 9 (manuscript p. 28).*
-
-Uniform flow can be disturbed by changes in bed slope, roughness or cross section, inflow from or outflow into a reservoir, and local structures such as gates and weirs. A local disturbance and the gradually varied adjustment away from it need not be described by the same model: abrupt transitions generally require an additional local balance.
-
-For small, long gravity waves in a rectangular channel, the wave celerity relative to the water is
-
-$$
-c=\sqrt{gy},\qquad Fr=\frac{U}{c}.
-$$
-
-Relative to the channel, the characteristic velocities are
-
-$$
-\boxed{U-c\quad\text{and}\quad U+c}.
-$$
-
-### Subcritical flow
-
-When $Fr<1$, $U<c$. One characteristic travels upstream and the other downstream:
-
-$$
-U-c<0,\qquad U+c>0.
-$$
-
-A downstream water-level disturbance can therefore influence the upstream reach. This gives the physical explanation for downstream depth control in subcritical GVF.
-
-### Supercritical flow
-
-When $Fr>1$, $U>c$ and both characteristics travel downstream:
-
-$$
-U-c>0,\qquad U+c>0.
-$$
-
-Small disturbances cannot carry information upstream against this flow. Upstream conditions determine the supercritical adjustment downstream. A sufficiently strong downstream obstruction may instead cause a jump and change the flow-regime configuration; that process is outside a single smooth GVF branch.
-
-<!-- PLOT: waves -->
-
-## 8. Boundary conditions
-
-*Handwritten notes: PDF p. 10 (manuscript p. 29).*
-
-For steady flow without lateral inflows,
-
-$$
-\frac{dQ}{dx}=0,
+\boxed{\frac{dy}{dx}=\frac{+}{-}<0},
 \qquad
-\frac{dy}{dx}=\frac{S_0-S_f(y)}{1-Fr^2(y)}.
+\frac{dU}{dx}=-\frac{U}{y}\frac{dy}{dx}>0.
 $$
 
-The discharge is specified and remains constant. The first-order depth equation then needs one depth condition on a noncritical branch. The physical position of that condition follows from information propagation.
+S2 is an **accelerating supercritical profile**: the depth decreases and the velocity increases downstream.
 
-On a reach $0\le x\le L$:
+**2. Upstream limit: vertical tangent at critical depth**
 
-| Regime | Given discharge | Depth condition | Integration direction |
-|---|---|---|---|
-| Subcritical | $Q=\bar Q$ | $y(L)=y_b>y_c$ | From downstream towards upstream |
-| Supercritical | $Q=\bar Q$ | $y(0)=y_b<y_c$ | From upstream towards downstream |
-
-These rules describe the steady, fixed-discharge problem used here; they are not a complete specification of every possible unsteady boundary-value problem.
-
-A numerical routine may be able to march an ODE from another end, but that alone does not make the imposed boundary condition physically appropriate. The Toy therefore rejects an upstream subcritical depth condition, a downstream supercritical depth condition, and a depth at or too close to critical depth.
-
-## 9. Selecting the physical profile around a disturbance
-
-*Handwritten notes: PDF pp. 11–12 (manuscript pp. 30–31).*
-
-The final sketches ask which side of a local disturbance can adjust smoothly towards uniform flow. Two checks are needed: the sign of $dy/dx$ must match the profile interval, and the branch must respect the direction of hydraulic influence.
-
-### 9.1 Mild channel
-
-For a mild channel, uniform flow is subcritical because $y_n>y_c$.
-
-**A depth above normal: M1.** If a downstream control raises the depth above $y_n$, the upstream adjustment is M1. Depth increases towards the control and tends to $y_n$ far upstream. A sketch showing decreasing depth downstream in this interval contradicts the positive gradient required by the equation.
-
-**A depth between critical and normal: M2.** A downstream control imposing $y_c<y_b<y_n$ selects an upstream M2 drawdown. Depth decreases towards the control and tends to $y_n$ far upstream. A sketch with a positive gradient in this interval is inconsistent with the sign analysis.
-
-**A depth below critical: M3.** This condition is supercritical and must be imposed upstream for a smooth downstream adjustment. The resulting M3 branch deepens downstream. It cannot merge smoothly with the mild channel's subcritical normal flow: a hydraulic jump or another transition is needed. The jump is not represented by the GVF differential equation, and its position requires matching the supercritical and subcritical reaches.
-
-### 9.2 Steep channel
-
-For a steep channel, uniform flow is supercritical because $y_n<y_c$.
-
-**A depth above critical: S1.** This is a subcritical reach controlled from downstream. Moving upstream, S1 tends towards critical depth rather than the supercritical normal depth. Connection to an upstream supercritical reach requires a separate transition, often a hydraulic jump when the conditions permit one.
-
-**A depth between normal and critical: S2.** An upstream condition $y_n<y_b<y_c$ gives an S2 profile. Depth decreases downstream and approaches $y_n$ from above. A downstream-increasing curve in this interval has the wrong sign.
-
-**A depth below normal: S3.** An upstream condition $0<y_b<y_n$ gives an S3 profile. Depth increases downstream and approaches $y_n$ from below. A downstream-decreasing curve in this interval has the wrong sign.
-
-The organizing rule is the conclusion of the notes: subcritical reaches are controlled by downstream depth, whereas supercritical reaches are controlled by upstream depth. Bed classification alone does not identify the controlling end; the local flow regime does.
-
-## 10. Numerical integration in the Toy
-
-*Implementation supplement, following the method identified in the supplied Toy as Defina, §8.2.1. This section is additional to the handwritten notes.*
-
-Define
+As $y\to y_c^-$,
 
 $$
-f(y)=\frac{S_0-S_f(y)}{1-Fr^2(y)}.
+1-\mathrm{Fr}^2\to0^-,\qquad
+S_0-S_f(y_c)>0,
 $$
 
-The Toy first computes $y_c$ explicitly and solves $S_f(y_n)=S_0$ by bisection. It then checks the prescribed boundary depth and its location before integrating.
-
-### Explicit Euler step
-
-For subcritical flow, integrate upstream with a positive step magnitude $\Delta x_i$:
+and consequently
 
 $$
-x_{i+1}=x_i-\Delta x_i,
-\qquad \boxed{y_{i+1}=y_i-f(y_i)\Delta x_i}.
+\boxed{\frac{dy}{dx}\to-\infty},
+\qquad \frac{dx}{dy}\to0^-.
 $$
 
-For supercritical flow, integrate downstream:
+The S2 profile approaches critical depth with a **vertical tangent** at a finite upstream endpoint of the idealized solution. The GVF equation cannot be continued smoothly through that singular point without additional analysis.
+
+**3. Downstream limit: normal-depth asymptote**
+
+As $y\to y_0^+$, the friction slope approaches the bed slope, while the denominator remains negative because $y_0<y_c$:
 
 $$
-x_{i+1}=x_i+\Delta x_i,
-\qquad \boxed{y_{i+1}=y_i+f(y_i)\Delta x_i}.
+S_0-S_f(y)\to0^+,\qquad
+1-\mathrm{Fr}^2(y_0)<0.
 $$
 
-All hydraulic quantities in $f(y_i)$ are evaluated at the current depth. This is a first-order explicit method. The minus sign for upstream integration changes the marching direction; it does not change the downstream-coordinate sign analysis used to classify profiles.
+Thus
 
-### Step control and stopping
+$$
+\boxed{\frac{dy}{dx}\to0^-}.
+$$
 
-The supplied Toy chooses a local step based on depth and reduces it when the gradient is large or the current depth is near critical. It also halves trial steps if needed to retain positive depth, limit the depth increment and stay on the same side of critical depth.
+The depth approaches $y_0$ **asymptotically downstream** ($x\to+\infty$ in the idealized mathematical solution). Unlike the critical-depth endpoint, normal depth is approached with a vanishing depth gradient rather than a vertical tangent.
 
-With automatic length enabled, the calculation may stop when it has approached normal depth or critical depth within numerical tolerances, or when a length or step limit is reached. These tolerances do not turn a normal-depth asymptote into an exact finite-distance endpoint. The denominator guard can stop the solver before critical depth is reached.
+[[s2]]
 
-The solver does not calculate a hydraulic jump or continue smoothly through a singular critical state. Numerical safeguards prevent invalid steps; they do not extend the physical validity of the GVF approximation.
+### S3 Profile — $0<y<y_0<y_c$
 
-### Accuracy and plotting
+**1. Sign of the depth gradient and flow regime**
 
-At fixed inputs and algorithm settings, the Toy's calculations are deterministic. Euler integration is approximate: a smaller spatial step generally reduces discretization error on a regular branch, but cannot repair an invalid physical model near a rapid transition. A step-refinement comparison is useful when quantitative accuracy matters; the current Toy does not provide a built-in convergence study.
+Below normal depth, friction exceeds the bed slope; below critical depth, the flow remains supercritical:
 
-The physical water-surface elevation is $z_w=z_b+y$. The Toy can display depths with a visual amplification factor $a$, producing $z_{\mathrm{display}}=z_b+a y$. When $a\ne1$, the displayed elevation and apparent surface slope are not physical elevations and slopes. Hover values report the actual depths, and the amplification does not change the numerical solution.
+$$
+S_0-S_f(y)<0,\qquad
+1-\mathrm{Fr}^2<0.
+$$
 
-## Sources and scope
+It follows that
 
-The chapter's sequence and qualitative argument follow the supplied twelve-page handwritten PDF. Its notation has been aligned with the supplied Toy, and Manning's resistance law is used to match that implementation. The adverse-slope discussion expands a heading-only manuscript page; the numerical and display sections explain the supplied code. Critical endpoints are distinguished from infinite-distance normal-depth asymptotes, and formal extreme-depth limits are kept separate from physically reliable predictions.
+$$
+\boxed{\frac{dy}{dx}=\frac{-}{-}>0},
+\qquad
+\frac{dU}{dx}=-\frac{U}{y}\frac{dy}{dx}<0.
+$$
+
+The S3 profile represents **decelerating supercritical flow**: depth increases and velocity decreases downstream.
+
+**2. Downstream limit: normal-depth asymptote**
+
+As $y\to y_0^-$, the numerator approaches zero from below, while the denominator remains strictly negative:
+
+$$
+S_0-S_f(y)\to0^-,\qquad
+1-\mathrm{Fr}^2(y_0)<0.
+$$
+
+Therefore,
+
+$$
+\boxed{\frac{dy}{dx}\to0^+}.
+$$
+
+The S3 profile approaches **normal depth asymptotically downstream**. In particular, the limiting gradient is zero, not infinite: $y_0$ is an equilibrium depth of the GVF equation.
+
+**3. Shallow-depth limit and physical restriction**
+
+Extrapolation upstream toward $y\to0^+$ requires caution. For a rectangular channel,
+
+$$
+U=\frac{Q}{by}\to+\infty,
+\qquad
+\mathrm{Fr}^2=\frac{Q^2}{gb^2y^3}\to+\infty.
+$$
+
+Using Manning's resistance relation and $R\sim y$ for small depths,
+
+$$
+S_f(y)\sim\frac{n^2Q^2}{b^2y^{10/3}}
+\qquad (y\to0^+).
+$$
+
+Consequently, within this idealized model,
+
+$$
+\frac{dy}{dx}
+=\frac{S_0-S_f}{1-\mathrm{Fr}^2}
+\sim\frac{gn^2}{y^{1/3}}>0.
+$$
+
+Although the mathematical gradient grows as $y$ approaches zero, the mean velocity becomes unbounded and the assumptions underlying gradually varied flow and Manning's resistance law are no longer physically reliable. **The zero-depth limit is not a physically realizable continuation of the S3 profile.**
+
+[[s3]]
+
+
+
+## H Profiles — Horizontal Bed
+
+For a horizontal channel, the bed slope vanishes:
+
+$$
+S_0=0.
+$$
+
+The gradually varied flow equation reduces to
+
+$$
+\boxed{\frac{dy}{dx}=\frac{-S_f(y)}{1-\mathrm{Fr}^2(y)}}.
+$$
+
+For positive discharge and finite flow depth, $S_f>0$. Consequently, the numerator is strictly negative. There is **no finite normal depth**, because the uniform-flow condition $S_f(y_0)=S_0=0$ cannot be satisfied at finite $y$. The critical depth $y_c$ divides the solutions into the subcritical H2 and supercritical H3 regions. The channel bed is horizontal in both profiles.
+
+### H2 Profile — $y>y_c$
+
+**1. Sign of the depth gradient and flow regime**
+
+Above critical depth, $\mathrm{Fr}<1$ and the denominator is positive. Therefore,
+
+$$
+S_0-S_f=-S_f<0,\qquad 1-\mathrm{Fr}^2>0,
+$$
+
+$$
+\boxed{\frac{dy}{dx}<0}.
+$$
+
+Since the mean velocity in a rectangular channel is $U=Q/(by)$,
+
+$$
+\frac{dU}{dx}=-\frac{U}{y}\frac{dy}{dx}>0.
+$$
+
+Thus, H2 describes **accelerating subcritical flow**: the water depth decreases and the velocity increases downstream.
+
+**2. Critical-depth limit**
+
+As $y\to y_c^+$, the denominator tends to zero from above, whereas $S_f(y_c)>0$:
+
+$$
+1-\mathrm{Fr}^2\to0^+,\qquad -S_f(y_c)<0,
+$$
+
+$$
+\boxed{\frac{dy}{dx}\to-\infty}.
+$$
+
+The H2 profile therefore reaches the critical-depth boundary with a **vertical tangent in the depth-versus-distance diagram**. This is a singular endpoint of the idealized GVF equation.
+
+**3. Large-depth limit**
+
+For $y\to\infty$, the hydraulic radius of a rectangular channel approaches $b/2$, the friction slope tends to zero, and $\mathrm{Fr}\to0$. Hence,
+
+$$
+\frac{dy}{dx}\to0^-.
+$$
+
+The mathematical H2 profile becomes progressively flatter at large depths, extending upstream toward arbitrarily large $y$. This does **not** represent a finite normal-depth asymptote: no finite uniform-flow depth exists for $S_0=0$.
+
+[[h2]]
+
+### H3 Profile — $0<y<y_c$
+
+**1. Sign of the depth gradient and flow regime**
+
+Below critical depth, $\mathrm{Fr}>1$ and the denominator is negative. Therefore,
+
+$$
+S_0-S_f=-S_f<0,\qquad 1-\mathrm{Fr}^2<0,
+$$
+
+$$
+\boxed{\frac{dy}{dx}>0}.
+$$
+
+It follows that
+
+$$
+\frac{dU}{dx}=-\frac{U}{y}\frac{dy}{dx}<0.
+$$
+
+Thus, H3 describes **decelerating supercritical flow**: the depth increases and the velocity decreases downstream.
+
+**2. Critical-depth limit**
+
+As $y\to y_c^-$, the denominator tends to zero from below and the numerator remains strictly negative:
+
+$$
+1-\mathrm{Fr}^2\to0^-,\qquad -S_f(y_c)<0,
+$$
+
+$$
+\boxed{\frac{dy}{dx}\to+\infty}.
+$$
+
+The H3 profile reaches the critical-depth boundary with a **vertical tangent in the depth-versus-distance diagram**.
+
+**3. Shallow-depth limit and physical restriction**
+
+As $y\to0^+$,
+
+$$
+U=\frac{Q}{by}\to+\infty,\qquad
+\mathrm{Fr}^2=\frac{Q^2}{gb^2y^3}\to+\infty.
+$$
+
+For a rectangular channel, $R\sim y$ as $y\to0^+$. Using Manning's equation,
+
+$$
+S_f(y)\sim\frac{n^2Q^2}{b^2y^{10/3}},
+$$
+
+and consequently
+
+$$
+\frac{dy}{dx}=\frac{-S_f}{1-\mathrm{Fr}^2}
+\sim\frac{gn^2}{y^{1/3}}\to+\infty.
+$$
+
+Although the mathematical model admits a formal shallow-depth limit, the corresponding unbounded velocity and gradient violate the physical assumptions underlying the gradually varied flow approximation. **The zero-depth limit is not a physically realizable continuation of the H3 profile.**
+
+[[h3]]
