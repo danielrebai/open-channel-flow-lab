@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: transparent; color: #53647a;
+         font-family: system-ui, -apple-system, sans-serif; }
+  svg { display: block; width: 100%; max-width: 1100px; height: auto;
+        margin: 0 auto; touch-action: none; user-select: none; overflow: hidden; }
+  .handle { fill: #fff9e9; stroke: #85542d; stroke-width: 4;
+            cursor: ns-resize; filter: drop-shadow(0 2px 3px #0004); }
+  .handle.active { fill: #ffdc9a; stroke-width: 5; }
+  .tag { font-size: 15px; font-weight: 850; fill: #845229;
+         paint-order: stroke; stroke: #f1fbff; stroke-width: 4px; stroke-linejoin: round; }
+  .subtle { font-size: 12px; fill: #718096; font-weight: 650; }
+  .slope { font-size: 16px; fill: #85542d; font-weight: 850; letter-spacing: 0.7px;
+           paint-order: stroke; stroke: #f1fbff; stroke-width: 4px; }
+  .profile { font-size: 17px; fill: #075b93; font-weight: 850;
+             paint-order: stroke; stroke: #f1fbff; stroke-width: 5px; stroke-linejoin: round; }
+  .bc { font-size: 12px; fill: #526276; font-weight: 700;
+        paint-order: stroke; stroke: #f1fbff; stroke-width: 4px; }
+</style>
+</head>
+<body>
+<svg id="scene" viewBox="0 0 1000 515"
+     aria-label="Downward facing step with independently draggable upstream slope, step height, downstream slope, and computed GVF profiles"></svg>
+<script>
+'use strict';
+const svg = document.getElementById('scene');
+const NS = 'http://www.w3.org/2000/svg';
+const LEFT = 70, STEP = 500, RIGHT = 930, TOP = 66, BOTTOM = 425;
+const BLUE = '#0284c7', GREEN = '#16a34a', RED = '#dc2626', BROWN = '#98602e';
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+let data = null, active = null, fixedView = null, view = {scale: 40, origin: 240};
+let stale = false, revision = 0;
+
+function send(type, extra={}) {
+  window.parent.postMessage({isStreamlitMessage:true, type, ...extra}, '*');
+}
+function E(tag, attrs={}, content, parent=svg) {
+  const el = document.createElementNS(NS, tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  if (content !== undefined) el.textContent = content;
+  parent.appendChild(el);
+  return el;
+}
+function xPixel(x) {
+  const L = Number(data.L) || 100;
+  return STEP + x / L * (x < 0 ? STEP - LEFT : RIGHT - STEP);
+}
+// The two bed elevations at x=0 are DIFFERENT. Never infer the bank from x=0.
+function bed(side, x) {
+  return side === 'U' ? -data.su * x : -data.a - data.sd * x;
+}
+function yElevation(z) { return view.origin - view.scale * z; }
+function yBed(side, x) { return yElevation(bed(side,x)); }
+function yDepth(side, x, depth) { return yElevation(bed(side,x) + depth); }
+function near(v, ref) { return Math.abs(v - ref) <= Math.max(.00005, .002 * ref); }
+function fm(v, decimals=3) { return Number(v).toFixed(decimals); }
+
+// Same Manning cross-section equation as in the Python solver.
+// During a drag this updates h_n immediately; the GVF solution is recomputed
+// by Streamlit only after the user releases the handle.
+function frictionSlope(h) {
+  const A = data.b*h, R = A/(data.b+2*h);
+  return Math.pow(data.n*data.q*data.b/(A*Math.pow(R,2/3)),2);
+}
+function normalDepth(s) {
+  let low=.001, high=100;
+  for (let i=0; i<90; ++i) {
+    const m=(low+high)/2;
+    if (frictionSlope(m)>s) low=m; else high=m;
+  }
+  return (low+high)/2;
+}
+function updateNormalDepths() {
+  data.nu=normalDepth(data.su);
+  data.nd=normalDepth(data.sd);
+}
+function bounds() {
+  const zs=[];
+  for (const side of ['U','D']) {
+    const xs=side==='U'?[-data.L,0]:[0,data.L];
+    const norm=side==='U'?data.nu:data.nd;
+    for (const x of xs) {
+      zs.push(bed(side,x), bed(side,x)+norm, bed(side,x)+data.hc);
+    }
+  }
+  if (!stale) {
+    for (const line of data.lines || []) {
+      for (let i=0;i<Math.min(line.x.length,line.h.length);i++) {
+        const x=Number(line.x[i]), h=Number(line.h[i]);
+        if (Number.isFinite(x)&&Number.isFinite(h)) zs.push(bed(line.side,x)+h);
+      }
+    }
+    for (const j of data.jumps || []) {
+      if (Number.isFinite(j.x)) zs.push(bed('D',j.x)+j.h1,bed('D',j.x)+j.h2);
+    }
+  }
+  const lo=Math.min(...zs), hi=Math.max(...zs), span=Math.max(.6, hi-lo);
+  const pad=Math.max(.20,.15*span);
+  return {lo:lo-pad,hi:hi+pad};
+}
+function fit() {
+  const {lo,hi}=bounds();
+  view.scale=(BOTTOM-TOP)/(hi-lo);
+  view.origin=TOP+hi*view.scale;
+}
+function path(points) {
+  return points.map((p,i)=>`${i?'L':'M'} ${fm(p[0],2)} ${fm(p[1],2)}`).join(' ');
+}
+function reference(side, h, color, dash, label) {
+  if (!(h>0)) return;
+  const xs=side==='U'?[-data.L,0]:[0,data.L];
+  // Because z_b(x) is affine, each reference line is EXACTLY parallel to its bed.
+  const p=xs.map(x=>[xPixel(x),yDepth(side,x,h)]);
+  E('path',{d:path(p),fill:'none',stroke:color,'stroke-width':2.1,
+            'stroke-dasharray':dash,'stroke-linecap':'round','pointer-events':'none'});
+  const pos = side==='U' ? (color === GREEN ? -.77 : -.48)
+                         : (color === GREEN ? .85 : .58);
+  const labelX=xPixel(pos*data.L);
+  const localX=pos*data.L;
+  const offset=color===GREEN?-9:15;
+  E('text',{x:labelX,y:yDepth(side,localX,h)+offset,'text-anchor':'middle',
+            class:'subtle',fill:color,'pointer-events':'none'},label);
+}
+function nameOf(line) {
+  if (!line.h?.length) return '';
+  const hn=line.side==='U'?data.nu:data.nd;
+  const hv=line.h.filter(Number.isFinite);
+  if (!hv.length) return '';
+  if (hv.every(h=>near(h,hn))) return 'Uniform flow';
+  const mid=hv[Math.floor(hv.length/2)];
+  if (hn>data.hc) return mid>hn?'M1':mid>data.hc?'M2':'M3';
+  return mid>data.hc?'S1':mid>hn?'S2':'S3';
+}
+function plotSolution() {
+  for (const line of data.lines||[]) {
+    if (line.side!=='U' && line.side!=='D') continue;
+    const points=[];
+    for (let i=0;i<Math.min(line.x.length,line.h.length);++i) {
+      const x=Number(line.x[i]),h=Number(line.h[i]);
+      if (Number.isFinite(x)&&Number.isFinite(h))
+        points.push([xPixel(x),yDepth(line.side,x,h)]);
+    }
+    if (points.length<2) continue;
+    E('path',{d:path(points),fill:'none',stroke:BLUE,'stroke-width':4,
+              'stroke-linecap':'round','stroke-linejoin':'round','pointer-events':'none'});
+    const mid=Math.floor(points.length*.54), label=nameOf(line);
+    if (label) E('text',{x:points[mid][0],y:points[mid][1]-15,
+              'text-anchor':'middle',class:'profile','pointer-events':'none'},label);
+  }
+  for (const j of data.jumps||[]) {
+    if (!Number.isFinite(j.x)) continue;
+    const x=xPixel(j.x), y1=yDepth('D',j.x,j.h1),y2=yDepth('D',j.x,j.h2);
+    E('line',{x1:x,x2:x,y1,y2,stroke:BLUE,'stroke-width':5,'pointer-events':'none'});
+    E('text',{x:x+13,y:Math.min(y1,y2)-10,class:'profile',
+              'pointer-events':'none'},'HJ');
+  }
+  for (const c of data.controls||[]) {
+    if (!Number.isFinite(c.h) || !['U','D'].includes(c.side)) continue;
+    const x=xPixel(c.x),y=yDepth(c.side,c.x,c.h);
+    E('circle',{cx:x,cy:y,r:8,fill:'#f7fbff',stroke:RED,'stroke-width':3.5,
+                'pointer-events':'none'});
+    let ax=0, anchor='middle';
+    if (c.x < 0) { ax=18;anchor='start'; }
+    else if (c.x > 0) { ax=-16;anchor='end'; }
+    else { ax=-16;anchor='end'; }
+    E('text',{x:x+ax,y:y-14,'text-anchor':anchor,class:'bc',
+              'pointer-events':'none'},c.label);
+  }
+}
+function draw() {
+  if (!data) return;
+  svg.replaceChildren();
+  const yu=yBed('U',-data.L),yl=yBed('U',0),yr=yBed('D',0),yd=yBed('D',data.L);
+  E('rect',{x:8,y:8,width:984,height:498,rx:18,fill:'#eaf5f9',
+            'fill-opacity':'.35',stroke:'#b6cbd3','stroke-width':1.5});
+  E('text',{x:500,y:37,'text-anchor':'middle',class:'subtle'},
+    'DRAG THE THREE BROWN HANDLES · RELEASE TO UPDATE THE WATER PROFILE');
+  E('line',{x1:STEP,x2:STEP,y1:52,y2:450,stroke:'#b4c7cf',
+            'stroke-dasharray':'5 8','stroke-width':1,'pointer-events':'none'});
+  const bedPts=[[LEFT,yu],[STEP,yl],[STEP,yr],[RIGHT,yd]];
+  E('path',{d:path(bedPts)+` L ${RIGHT} 462 L ${LEFT} 462 Z`,
+            fill:'#ae825d','fill-opacity':'.27',stroke:'none','pointer-events':'none'});
+  E('path',{d:path(bedPts),fill:'none',stroke:BROWN,'stroke-width':5,
+            'stroke-linejoin':'round','stroke-linecap':'round','pointer-events':'none'});
+
+  reference('U',data.nu,GREEN,'4 7','hₙ,U');
+  reference('U',data.hc,RED,'10 8','h_c');
+  reference('D',data.nd,GREEN,'4 7','hₙ,D');
+  reference('D',data.hc,RED,'10 8','h_c');
+
+  if (!stale) plotSolution();
+  else E('text',{x:STEP,y:65,'text-anchor':'middle',class:'subtle'},
+              'Release the handle to recompute the water-surface profile');
+
+  const slopeU=data.nu>data.hc?'MILD SLOPE':'STEEP SLOPE';
+  const slopeD=data.nd>data.hc?'MILD SLOPE':'STEEP SLOPE';
+  for (const [side,x,label] of [['U',-data.L*.55,slopeU],['D',data.L*.55,slopeD]]) {
+    const bottom=yBed(side,x)+30;
+    E('text',{x:xPixel(x),y:clamp(bottom,60,458),'text-anchor':'middle',
+              class:'slope','pointer-events':'none'},label);
+  }
+
+  // Independent handles: upstream controls only z_b,U(-L), downstream only
+  // z_b,D(+L), and centre only z_b,D(0), leaving z_b,U(0)=0 fixed.
+  for (const h of [
+    {id:'su',x:LEFT,y:yu,label:'S₀,U',dx:21},
+    {id:'a',x:STEP,y:yr,label:'a',dx:22},
+    {id:'sd',x:RIGHT,y:yd,label:'S₀,D',dx:-22},
+  ]) {
+    E('circle',{cx:h.x,cy:h.y,r:13,class:'handle'+(active===h.id?' active':''),
+                'data-handle':h.id});
+    E('text',{x:h.x+h.dx,y:h.y-19,'text-anchor':h.dx>0?'start':'end',
+              class:'tag','pointer-events':'none'},h.label);
+  }
+  E('text',{x:LEFT,y:480,class:'subtle'},'100 m upstream');
+  E('text',{x:RIGHT,y:480,'text-anchor':'end',class:'subtle'},'100 m downstream');
+  E('text',{x:STEP,y:480,'text-anchor':'middle',class:'subtle'},`a = ${fm(data.a,2)} m`);
+  E('text',{x:500,y:501,'text-anchor':'middle',class:'subtle'},
+    'Blue: integrated water surface  ·  Green: normal depth  ·  Red: critical depth');
+}
+function point(ev) {
+  const p=svg.createSVGPoint();
+  p.x=ev.clientX;p.y=ev.clientY;
+  const ctm=svg.getScreenCTM();
+  return ctm ? p.matrixTransform(ctm.inverse()) : p;
+}
+function adjust(ev) {
+  if (!active || !fixedView) return;
+  const pos=point(ev);
+  const s=fixedView.scale,zero=fixedView.origin;
+  if (active==='su') {
+    // z(-L)=su L; z(0-)=0, a and sd stay fixed.
+    data.su=clamp((zero-pos.y)/(s*data.L),.00002,.04);
+  } else if (active==='a') {
+    // z(0+)=-a; upstream lip and both slopes stay fixed.
+    data.a=clamp((pos.y-zero)/s,.02,2.5);
+  } else if (active==='sd') {
+    // z(+L)=-a-sd L; downstream lip and su stay fixed.
+    data.sd=clamp((pos.y-zero-s*data.a)/(s*data.L),.00002,.04);
+  }
+  updateNormalDepths();
+  stale=true;
+  draw();
+}
+svg.addEventListener('pointerdown',ev=>{
+  const handle=ev.target.closest('[data-handle]');
+  if (!handle || !data) return;
+  active=handle.getAttribute('data-handle');
+  fixedView={...view};
+  svg.setPointerCapture(ev.pointerId);
+  ev.preventDefault();
+  draw();
+});
+svg.addEventListener('pointermove',ev=>{if(active)adjust(ev)});
+function finish(ev) {
+  if(!active) return;
+  if(ev.type==='pointerup')adjust(ev);
+  active=null;fixedView=null;
+  draw();
+  send('streamlit:setComponentValue', {
+    value:{su:data.su,sd:data.sd,a:data.a,revision:Date.now()+ (++revision)/1000},
+    dataType:'json',
+  });
+}
+svg.addEventListener('pointerup',finish);
+svg.addEventListener('pointercancel',finish);
+window.addEventListener('message',ev=>{
+  if(ev.data?.type!=='streamlit:render' || active) return;
+  const payload=ev.data.args?.data;
+  if (!payload) return;
+  data=structuredClone(payload);
+  stale=false;
+  fit();
+  draw();
+  send('streamlit:setFrameHeight',{height:Math.ceil(svg.getBoundingClientRect().height)+12});
+});
+window.addEventListener('resize',()=>send('streamlit:setFrameHeight',
+  {height:Math.ceil(svg.getBoundingClientRect().height)+12}));
+send('streamlit:componentReady',{apiVersion:1});
+send('streamlit:setFrameHeight',{height:530});
+</script>
+</body>
+</html>
