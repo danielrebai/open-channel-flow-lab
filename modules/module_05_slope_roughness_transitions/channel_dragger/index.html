@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}body{margin:0;background:transparent;font-family:system-ui,-apple-system,sans-serif;color:#53647a}
+svg{display:block;width:100%;max-width:1100px;height:auto;aspect-ratio:900 / 520;margin:0 auto;touch-action:none;user-select:none;overflow:hidden}
+.handle{fill:#fff9e9;stroke:#85542d;stroke-width:4;cursor:ns-resize;filter:drop-shadow(0 2px 3px #0004)}
+.label{font-size:12px;fill:#718096;letter-spacing:1px;font-weight:600}.tip{font-size:12px;fill:#784c2c;font-weight:800}.slope-label{font-size:17px;fill:#34536c;font-weight:850;letter-spacing:1.3px}.jump-label{font-size:17px;fill:#b72d35;font-weight:850;paint-order:stroke;stroke:#f7fbff;stroke-width:4px}.profile-label{font-size:16px;fill:#075b93;font-weight:850;paint-order:stroke;stroke:#f1fbff;stroke-width:4px}
+</style></head><body>
+<svg id="flume" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet" aria-label="Open-channel flume with two draggable bed endpoints"></svg>
+<script>
+'use strict';
+const svg=document.getElementById('flume');
+const NS='http://www.w3.org/2000/svg';
+let args={},ratio=[.4,2.2],active=null,scale=40,mid=200,dragRevision=0;
+const X0=46,XC=450,X1=854,TOP=58,BOTTOM=445;
+function send(type,data={}){parent.postMessage({isStreamlitMessage:true,type,...data},'*')}
+function E(tag,attrs={},txt,container=svg){const n=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(txt!==undefined)n.textContent=txt;container.appendChild(n);return n}
+function xcoord(x){return x<0?XC+(x/args.L1)*(XC-X0):XC+(x/args.L2)*(X1-XC)}
+let bedFactor=1, depthFactor=2.8;
+function visualZ(x,z){return bed(x)*bedFactor+(z-bed(x))*depthFactor}
+function ycoord(z,x){return mid-visualZ(x,z)*scale}
+function bedY(x){return mid-bed(x)*bedFactor*scale}
+function bed(x){return x<0?-Number(args.s1)*x:-Number(args.s2)*x}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function waterSegments(){
+ const out=[];
+ for(const line of args.lines||[]){
+  if(!Array.isArray(line.x)||!Array.isArray(line.z))continue;
+  const pts=[];
+  for(let i=0;i<line.x.length;i++){
+   const x=Number(line.x[i]),z=Number(line.z[i]);
+   if(Number.isFinite(x)&&Number.isFinite(z))pts.push({x,z});
+  }
+  if(pts.length>1)out.push(pts);
+ }
+ return out;
+}
+function interpolate(pts,x){
+ if(x<=pts[0].x)return pts[0].z;
+ if(x>=pts[pts.length-1].x)return pts[pts.length-1].z;
+ let lo=0,hi=pts.length-1;
+ while(hi-lo>1){const m=(lo+hi)>>1;if(pts[m].x<x)lo=m;else hi=m}
+ const a=pts[lo],b=pts[hi],f=(x-a.x)/(b.x-a.x||1);
+ return a.z+(b.z-a.z)*f;
+}
+function pathOf(pts){return pts.map((p,i)=>`${i?'L':'M'}${xcoord(p.x).toFixed(2)} ${ycoord(p.z,p.x).toFixed(2)}`).join(' ')}
+function polygonOf(pts){
+ const a=pts.map(p=>`${xcoord(p.x)},${ycoord(p.z,p.x)}`);
+ const b=pts.slice().reverse().map(p=>`${xcoord(p.x)},${bedY(p.x)}`);
+ return [...a,...b].join(' ');
+}
+
+function depthAt(x,segs){
+ const s=segs.find(a=>a.length>1 && Math.abs(a[a.length-1].x-a[0].x)>1e-7 && x>=a[0].x-1e-6 && x<=a[a.length-1].x+1e-6);
+ return s ? interpolate(s,x)-bed(x) : null;
+}
+function profileName(depth,yn,yc){
+ if(!(depth>0 && yn>0 && yc>0))return '';
+ const mild=yn>yc;
+ const tol=.018*Math.max(yn,yc);
+ if(Math.abs(depth-yn)<tol)return 'Uniform flow';
+ if(Math.abs(depth-yc)<tol)return 'Critical flow';
+ if(mild)return depth>yn?'M1':depth>yc?'M2':'M3';
+ return depth>yc?'S1':depth>yn?'S2':'S3';
+}
+function annotations(segs){
+ const yc=Number(args.yc);
+ for(const [xa,xb,yn] of [[-args.L1,0,Number(args.yn1)],[0,args.L2,Number(args.yn2)]]){
+  const xc=(xa+xb)/2;
+  E('text',{x:xcoord(xc),y:503,'text-anchor':'middle',class:'slope-label'},yn>yc?'MILD SLOPE':'STEEP SLOPE');
+  // Classify each computed numerical branch, not only a coarse x-grid.
+  // This preserves short M3/S3 reaches near a critical control.
+  const regions=[];
+  for(const seg of segs){
+   if(seg.length<2)continue;
+   const xs=seg.map(p=>p.x);
+   if(Math.max(...xs)-Math.min(...xs)<1e-7)continue; // jump itself
+   const pts=seg.filter(p=>p.x>=xa-1e-7 && p.x<=xb+1e-7);
+   if(pts.length<2)continue;
+   const labels=pts.map(p=>({x:p.x,dep:p.z-bed(p.x)}))
+     .filter(p=>Number.isFinite(p.dep)&&p.dep>0);
+   if(!labels.length)continue;
+   // Uniform is an asymptotic state, not a competing label for a GVF profile.
+   const nonUniform=labels.map(p=>({...p,name:profileName(p.dep,yn,yc)}))
+     .filter(p=>p.name && p.name!=='Uniform flow' && p.name!=='Critical flow');
+   const source=nonUniform.length?nonUniform:labels.map(p=>({...p,name:profileName(p.dep,yn,yc)}));
+   const counts=new Map();
+   for(const p of source)counts.set(p.name,(counts.get(p.name)||0)+1);
+   const name=[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0];
+   if(!name)continue;
+   const candidates=source.filter(p=>p.name===name);
+   // Position within the actual branch, not a near-uniform endpoint.
+   const chosen=candidates[Math.floor(candidates.length/2)];
+   regions.push({name,x:chosen.x,dep:chosen.dep,weight:candidates.length});
+  }
+  // One label per distinct region. Suppress duplicate uniform and profile labels.
+  const names=[...new Set(regions.map(r=>r.name))];
+  for(const name of names){
+   const candidates=regions.filter(r=>r.name===name);
+   const r=candidates.sort((a,b)=>b.weight-a.weight)[0];
+   const yy=clamp(ycoord(bed(r.x)+r.dep,r.x)-16,54,425);
+   const px=xcoord(r.x);
+   const jumpXs=segs.filter(s=>s.length===2&&Math.abs(s[0].x-s[1].x)<1e-5).map(s=>xcoord(s[0].x));
+   if(jumpXs.some(jx=>Math.abs(px-jx)<90))continue;
+   E('text',{x:px,y:yy,'text-anchor':'middle',class:'profile-label'},name);
+  }
+ }
+}
+
+function draw(){
+ svg.replaceChildren();if(!args.L1||!args.L2)return;
+ const segs=waterSegments();
+ // Keep the bed geometry invariant when roughness changes.
+ // The visual scale depends ONLY on the two physical bed slopes and lengths,
+ // never on water levels, normal depths, or computed profile segments.
+ // Stable camera: geometry is fitted into a dedicated bed band.
+ // Neither K_s nor water depths can move the bed or alter its visual slope.
+ // Fixed camera: the channel junction is at y=340. Bed elevation is
+ // constrained to a 110px band on either side, independent of roughness.
+ // The resulting scale is a function of S0,1 and S0,2 ONLY.
+ const leftRise=Number(args.s1)*Number(args.L1);
+ const rightDrop=Number(args.s2)*Number(args.L2);
+ const maxBedSpan=Math.max(leftRise,rightDrop,1e-6);
+ scale=Math.min(90,110/maxBedSpan);
+ mid=335;
+ bedFactor=1;
+ // Keep the maximum water surface/reference within the viewport.
+ // Water-depth exaggeration can change with K_s, but bedY() never does.
+ const depths=[Number(args.yc),Number(args.yn1),Number(args.yn2)];
+ for(const seg of segs)for(const p of seg)depths.push(p.z-bed(p.x));
+ const maxDepth=Math.max(.01,...depths.filter(v=>Number.isFinite(v)&&v>0));
+ const topBed=mid-leftRise*scale;
+ depthFactor=Math.min(2.8,Math.max(.0001,(topBed-65)/(maxDepth*scale)));
+
+ const defs=E('defs');
+ const gradient=E('linearGradient',{id:'waterfill',gradientUnits:'userSpaceOnUse',x1:'0',y1:'55',x2:'0',y2:'475'},undefined,defs);
+ E('stop',{offset:'0%','stop-color':'#a9eaf5','stop-opacity':'.75'},undefined,gradient);
+ E('stop',{offset:'100%','stop-color':'#168fc7','stop-opacity':'.78'},undefined,gradient);
+ const clip=E('clipPath',{id:'wetclip'},undefined,defs);
+ for(const seg of segs)E('polygon',{points:polygonOf(seg)},undefined,clip);
+ // Laboratory-style backdrop and side-wall frame.
+ E('rect',{x:15,y:15,width:870,height:460,rx:12,fill:'#eaf5f9','fill-opacity':'.35',stroke:'#b6cbd3','stroke-width':1.5});
+ E('line',{x1:XC,y1:22,x2:XC,y2:472,stroke:'#8ea2ad','stroke-dasharray':'5 7','stroke-opacity':'.6'});
+ // Channel bottom, shaded to give a physical flume appearance.
+ const bedpts=[{x:-args.L1,z:bed(-args.L1)},{x:0,z:0},{x:args.L2,z:bed(args.L2)}];
+ const floor=bedpts.map(p=>`${xcoord(p.x)},${ycoord(p.z,p.x)}`).join(' ')+' 854,476 46,476';
+ E('polygon',{points:floor,fill:'#ae825d','fill-opacity':'.34'});
+ E('polyline',{points:bedpts.map(p=>`${xcoord(p.x)},${ycoord(p.z,p.x)}`).join(' '),fill:'none',stroke:'#79512f','stroke-opacity':'.66','stroke-width':5,'stroke-linejoin':'round','stroke-linecap':'round'});
+ // Static stones show relative hydraulic roughness (decorative, not bed geometry).
+ // Strickler K_s is inverse to resistance: lower K_s means larger stones.
+ function stones(xa,xb,ks,seed){
+  const rough=clamp((110-ks)/85,0,1);
+  const size=2.1+rough*10.5;
+  const count=rough>.72?31:rough>.35?39:48;
+  const group=E('g',{'pointer-events':'none','aria-hidden':'true'});
+  for(let i=0;i<count;i++){
+   const t=(i+.38+.17*Math.sin(i*4.19+seed))/(count+.1);
+   const x=xa+(xb-xa)*t,px=xcoord(x),py=bedY(x);
+   const r=size*(.65+.35*(.5+.5*Math.sin(i*12.9898+seed*4.7)));
+   const cy=py-r*.34;
+   const points=[
+    [px-r*.94,cy+r*.36],[px-r*.76,cy-r*.45],
+    [px-r*.20,cy-r*.86],[px+r*.47,cy-r*.68],
+    [px+r*.96,cy+r*.24],[px+r*.30,cy+r*.57]
+   ].map(v=>v.map(n=>n.toFixed(2)).join(',')).join(' ');
+   E('polygon',{points,fill:i%3===0?'#82766a':i%3===1?'#9a8a7b':'#766b60',
+      stroke:'#65594d','stroke-width':'.75',opacity:'.92'},undefined,group);
+   E('path',{d:`M ${px-r*.58} ${cy-r*.35} L ${px-r*.13} ${cy-r*.62} L ${px+r*.22} ${cy-r*.49}`,
+      stroke:'#c7b6a3','stroke-width':'.9',fill:'none','stroke-opacity':'.65'},undefined,group);
+  }
+ }
+ stones(-args.L1,0,Number(args.k1??70),1);
+ stones(0,args.L2,Number(args.k2??70),2);
+ // Static water surface and fill from the numerical solution.
+ for(const seg of segs){
+  E('polygon',{points:polygonOf(seg),fill:'url(#waterfill)'});
+  E('path',{d:pathOf(seg),fill:'none',stroke:'#168bc4','stroke-width':2.2,'stroke-linejoin':'round'});
+ }
+ // Reference depths: dashed red critical line and dotted green normal lines.
+ // Each follows the physical bed and uses the same visual depth exaggeration.
+ function referenceLine(xa,xb,depth,color,dash){
+  if(!(Number.isFinite(depth)&&depth>0))return;
+  const d=Array.from({length:41},(_,i)=>{
+   const x=xa+(xb-xa)*i/40;
+   return `${i?'L':'M'}${xcoord(x).toFixed(2)} ${ycoord(bed(x)+depth,x).toFixed(2)}`;
+  }).join(' ');
+  E('path',{d,fill:'none',stroke:color,'stroke-width':2.7,
+    'stroke-dasharray':dash,'stroke-linecap':'round','stroke-opacity':'.94',
+    'pointer-events':'none'});
+ }
+ const yc=Number(args.yc),yn1=Number(args.yn1),yn2=Number(args.yn2);
+ referenceLine(-args.L1,0,yc,'#d43b44','10 7');
+ referenceLine(0,args.L2,yc,'#d43b44','10 7');
+ referenceLine(-args.L1,0,yn1,'#238b57','3 7');
+ referenceLine(0,args.L2,yn2,'#238b57','3 7');
+ // Hydraulic jump: whitewater only when a computed vertical surface segment exists.
+ const jumps=segs.filter(s=>s.length===2&&Math.abs(s[0].x-s[1].x)<1e-5&&Math.abs(s[0].z-s[1].z)>.015);
+ const foam=E('g',{id:'foam'});
+ for(const seg of jumps){
+  const x=xcoord(seg[0].x),y1=ycoord(seg[0].z,seg[0].x),y2=ycoord(seg[1].z,seg[1].x),top=Math.min(y1,y2),height=Math.abs(y2-y1);
+  E('path',{d:`M ${x-8} ${Math.max(24,top-4)} Q ${x+10} ${top+height*.35} ${x-1} ${top+height} `,stroke:'#f8ffff','stroke-width':7,'stroke-opacity':'.8',fill:'none'},undefined,foam);
+  // A single, static annotation identifies the computed hydraulic jump.
+  // Place it above the discontinuity without changing the numerical profile.
+  const labelY=clamp(top-30,42,390);
+  const labelX=clamp(x-65,140,740);
+  E('line',{x1:labelX+40,y1:labelY+8,x2:x,y2:Math.max(25,top-6),stroke:'#b72d35','stroke-width':1.7},undefined,foam);
+  E('text',{x:labelX,y:labelY,'text-anchor':'middle',class:'jump-label'},'Hydraulic jump');
+ }
+ annotations(segs);
+ // The solver provides the actual boundary-control locations and depths.
+ // Do not infer these positions from the profile label or from the transition.
+ const controls=Array.isArray(args.controls)
+   ? args.controls.map(c=>[Number(c.x),Number(c.depth)])
+   : [];
+ for(const [x,y] of controls){
+  if(!Number.isFinite(y)||y<=0)continue;
+  const cx=xcoord(x),cy=ycoord(bed(x)+y,x);
+  E('circle',{cx,cy,r:8.5,fill:'#ffffff','fill-opacity':'.92',stroke:'#bd2535','stroke-width':2.5});
+  E('circle',{cx,cy,r:4.5,fill:'#e63242'});
+ }
+ for(const [index,x] of [[0,-args.L1],[1,args.L2]]){
+  const y=bedY(x);
+  E('circle',{cx:xcoord(x),cy:y,r:20,fill:'#8a582c',opacity:'.15'});
+  E('circle',{cx:xcoord(x),cy:y,r:11,class:'handle','data-handle':index});
+  E('text',{x:xcoord(x),y:clamp(y+30,34,462),'text-anchor':'middle',class:'tip','pointer-events':'none'},'DRAG');
+ }
+
+}
+function local(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const ctm=svg.getScreenCTM();return ctm?pt.matrixTransform(ctm.inverse()).y:0}
+function adjust(e){if(active===null)return;const z=(mid-local(e))/scale/bedFactor;
+ const L=active===0?args.L1:args.L2;
+ const slope=active===0?z/L:-z/L;
+ const physical=clamp(slope,0.000001,0.05);
+ if(active===0)args.s1=physical;else args.s2=physical;
+ draw();
+}
+svg.addEventListener('pointerdown',e=>{const h=e.target.closest('[data-handle]');if(!h)return;active=Number(h.dataset.handle);svg.setPointerCapture(e.pointerId)});
+svg.addEventListener('pointermove',adjust);
+svg.addEventListener('pointerup',e=>{if(active===null)return;adjust(e);active=null;send('streamlit:setComponentValue',{value:{s1:Number(args.s1),s2:Number(args.s2),revision:++dragRevision},dataType:'json'})});
+svg.addEventListener('pointercancel',()=>{active=null});
+window.addEventListener('message',e=>{if(e.data?.type==='streamlit:render'){args=e.data.args||{};if(active===null)ratio=[Number(args.left),Number(args.right)];draw();send('streamlit:setFrameHeight',{height:Math.ceil(svg.getBoundingClientRect().height)+12})}});
+send('streamlit:componentReady',{apiVersion:1});send('streamlit:setFrameHeight',{height:Math.ceil(svg.getBoundingClientRect().height)+12});window.addEventListener('resize',()=>send('streamlit:setFrameHeight',{height:Math.ceil(svg.getBoundingClientRect().height)+12}));
+
+</script></body></html>
